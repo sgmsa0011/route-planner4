@@ -34,19 +34,139 @@ interface SceneProps {
   presetPose?: string | null
 }
 
-// 背景壁コンポーネント
+// 背景壁コンポーネント（アスペクト比対応）
 function BackgroundWall({ imageUrl }: { imageUrl?: string }) {
   const texture = useTexture(imageUrl || '/wall.jpg')
+  const [dimensions, setDimensions] = useState({ width: 8, height: 6 })
+
+  useEffect(() => {
+    if (texture && texture.image) {
+      const img = texture.image
+      const aspectRatio = img.width / img.height
+      const maxWidth = 10
+      const maxHeight = 8
+
+      let width, height
+      if (aspectRatio > maxWidth / maxHeight) {
+        // 幅が制限要素
+        width = maxWidth
+        height = maxWidth / aspectRatio
+      } else {
+        // 高さが制限要素
+        height = maxHeight
+        width = maxHeight * aspectRatio
+      }
+
+      setDimensions({ width, height })
+      console.log('背景画像サイズ調整:', `${img.width}x${img.height} → ${width.toFixed(1)}x${height.toFixed(1)}`)
+    }
+  }, [texture])
 
   return (
     <mesh position={[0, 0, -2]} rotation={[0, 0, 0]}>
-      <planeGeometry args={[8, 6]} />
+      <planeGeometry args={[dimensions.width, dimensions.height]} />
       <meshBasicMaterial
         map={texture}
         transparent={false}
         side={THREE.FrontSide}
       />
     </mesh>
+  )
+}
+
+// 関節コントロールポイント（復活・改善版）
+function JointControl({
+  bone,
+  onDrag,
+  isVisible
+}: {
+  bone: THREE.Bone
+  onDrag: (bone: THREE.Bone, position: THREE.Vector3) => void
+  isVisible: boolean
+}) {
+  const meshRef = useRef<THREE.Mesh>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  const [worldPosition] = useState(new THREE.Vector3())
+
+  useFrame(() => {
+    if (meshRef.current && bone) {
+      // ボーンのワールド座標を取得
+      bone.getWorldPosition(worldPosition)
+      meshRef.current.position.copy(worldPosition)
+    }
+  })
+
+  const handlePointerDown = useCallback((event: ThreeEvent<PointerEvent>) => {
+    event.stopPropagation()
+    setIsDragging(true)
+  }, [])
+
+  const handlePointerUp = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
+  const handlePointerMove = useCallback((event: ThreeEvent<PointerEvent>) => {
+    if (isDragging) {
+      event.stopPropagation()
+      const newPosition = event.point
+      onDrag(bone, newPosition)
+    }
+  }, [isDragging, bone, onDrag])
+
+  const handlePointerEnter = useCallback(() => {
+    setIsHovered(true)
+  }, [])
+
+  const handlePointerLeave = useCallback(() => {
+    setIsHovered(false)
+  }, [])
+
+  if (!isVisible) return null
+
+  // 関節の重要度に応じてサイズと色を調整
+  const isImportantJoint = bone.name.toLowerCase().includes('hand') ||
+                          bone.name.toLowerCase().includes('foot') ||
+                          bone.name.toLowerCase().includes('head') ||
+                          bone.name.toLowerCase().includes('spine')
+
+  const sphereSize = isImportantJoint ? 0.15 : 0.1
+  const baseColor = isImportantJoint ? '#ff6b6b' : '#4ecdc4'
+  const hoverColor = isImportantJoint ? '#ff9999' : '#6fe6dd'
+  const dragColor = '#ffff00'
+
+  return (
+    <group>
+      {/* メイン関節球 */}
+      <mesh
+        ref={meshRef}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerMove={handlePointerMove}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
+      >
+        <sphereGeometry args={[sphereSize, 12, 12]} />
+        <meshBasicMaterial
+          color={isDragging ? dragColor : (isHovered ? hoverColor : baseColor)}
+          transparent
+          opacity={0.8}
+        />
+      </mesh>
+
+      {/* ホバー時のリング */}
+      {isHovered && (
+        <mesh position={worldPosition}>
+          <ringGeometry args={[sphereSize * 1.5, sphereSize * 2, 16]} />
+          <meshBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.3}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+    </group>
   )
 }
 
@@ -114,6 +234,11 @@ function HumanModel({
   const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate')
   const [bones, setBones] = useState<THREE.Bone[]>([])
   const [originalPose, setOriginalPose] = useState<Record<string, BoneData> | null>(null)
+  const [modelTransform, setModelTransform] = useState({
+    position: new THREE.Vector3(0, -1, 0),
+    rotation: new THREE.Euler(0, 0, 0),
+    scale: new THREE.Vector3(1, 1, 1)
+  })
 
   const gltf = useGLTF(modelUrl || '/model.glb')
 
@@ -138,9 +263,9 @@ function HumanModel({
       setOriginalPose(originalBoneData)
 
       // モデル位置設定
-      modelRef.current.position.set(0, -1, 0)
-      modelRef.current.scale.set(1, 1, 1)
-      modelRef.current.rotation.set(0, 0, 0)
+      modelRef.current.position.copy(modelTransform.position)
+      modelRef.current.scale.copy(modelTransform.scale)
+      modelRef.current.rotation.copy(modelTransform.rotation)
 
       console.log('モデル読み込み完了:', foundBones.length, 'ボーン')
 
@@ -148,7 +273,7 @@ function HumanModel({
         setIsModelReady(true)
       }, 200)
     }
-  }, [gltf.scene])
+  }, [gltf.scene, modelTransform])
 
   // プリセットポーズ適用
   useEffect(() => {
@@ -218,10 +343,10 @@ function HumanModel({
     }
   }, [bones, originalPose, onPoseChange])
 
-  // リセット機能
+  // リセット機能（改善版）
   useEffect(() => {
     if (resetTrigger && originalPose && modelRef.current) {
-      // ボーンリセット
+      // ボーンのみリセット（モデルTransformは保持）
       bones.forEach((bone) => {
         const original = originalPose[bone.name]
         if (original) {
@@ -231,14 +356,36 @@ function HumanModel({
         }
       })
 
-      // モデル自体のリセット
-      modelRef.current.position.set(0, -1, 0)
-      modelRef.current.rotation.set(0, 0, 0)
-      modelRef.current.scale.set(1, 1, 1)
+      console.log('ポーズリセット完了（モデル変形は保持）')
 
-      console.log('ポーズリセット完了')
+      // ポーズ変更を通知
+      if (onPoseChange) {
+        const poseData = extractCurrentPose()
+        onPoseChange(poseData)
+      }
     }
-  }, [resetTrigger, bones, originalPose])
+  }, [resetTrigger, bones, originalPose, onPoseChange])
+
+  // 関節ドラッグハンドラー
+  const handleJointDrag = useCallback((bone: THREE.Bone, newPosition: THREE.Vector3) => {
+    // 簡易的なIK: 関節を新しい位置に向けて回転
+    const parent = bone.parent
+    if (parent && parent instanceof THREE.Bone) {
+      const currentPos = bone.getWorldPosition(new THREE.Vector3())
+      const parentPos = parent.getWorldPosition(new THREE.Vector3())
+
+      const currentDir = currentPos.clone().sub(parentPos).normalize()
+      const targetDir = newPosition.clone().sub(parentPos).normalize()
+
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(currentDir, targetDir)
+      parent.quaternion.multiply(quaternion)
+    }
+
+    if (onPoseChange) {
+      const poseData = extractCurrentPose()
+      onPoseChange(poseData)
+    }
+  }, [onPoseChange])
 
   // 現在のポーズ抽出
   const extractCurrentPose = useCallback((): PoseData => {
@@ -263,12 +410,7 @@ function HumanModel({
   }, [bones])
 
   if (!gltf || !gltf.scene) {
-    return (
-      <mesh position={[0, 0, 0]}>
-        <boxGeometry args={[0.5, 1.5, 0.3]} />
-        <meshBasicMaterial color="#ff6b6b" />
-      </mesh>
-    )
+    return null // 水色立方体を削除
   }
 
   return (
@@ -299,24 +441,36 @@ function HumanModel({
           space={transformMode === 'rotate' ? 'local' : 'world'}
           onObjectChange={() => {
             if (onPoseChange && modelRef.current) {
+              // モデル変形を記録
+              setModelTransform({
+                position: modelRef.current.position.clone(),
+                rotation: modelRef.current.rotation.clone(),
+                scale: modelRef.current.scale.clone()
+              })
+
               const poseData = extractCurrentPose()
               onPoseChange(poseData)
             }
           }}
         />
       )}
+
+      {/* 関節コントロールポイント（ポーズ編集モード時のみ） */}
+      {bones.map((bone) => (
+        <JointControl
+          key={bone.uuid}
+          bone={bone}
+          onDrag={handleJointDrag}
+          isVisible={operationMode === 'pose'}
+        />
+      ))}
     </group>
   )
 }
 
-// フォールバック用モデル
+// フォールバック用モデル（削除）
 function FallbackModel() {
-  return (
-    <mesh position={[0, 0, 0]}>
-      <boxGeometry args={[0.5, 1.5, 0.3]} />
-      <meshBasicMaterial color="#4facfe" />
-    </mesh>
-  )
+  return null // 何も表示しない
 }
 
 // 軽量ライティング
@@ -372,7 +526,7 @@ function Scene({
         minDistance={2}
         maxDistance={8}
         target={[0, 0, 0]}
-        enabled={operationMode !== 'transform'}
+        enabled={operationMode === 'view'}
       />
     </>
   )
@@ -439,6 +593,9 @@ export default function Canvas3D({
           {operationMode === 'transform' && (
             <div className="text-yellow-300">⚠️ TransformControls</div>
           )}
+          {operationMode === 'pose' && (
+            <div className="text-green-300">🤸 関節操作可能</div>
+          )}
         </div>
       )}
 
@@ -453,7 +610,14 @@ export default function Canvas3D({
             <div className="text-green-200">• ESC: 選択解除</div>
           </div>
         )}
-        {operationMode === 'pose' && <div className="text-xs text-gray-300">プリセットポーズ選択可能</div>}
+        {operationMode === 'pose' && (
+          <div className="text-xs space-y-1">
+            <div className="text-gray-300">ポーズ編集:</div>
+            <div className="text-red-200">• 赤球: 重要関節（手・足・頭）</div>
+            <div className="text-cyan-200">• 青球: 一般関節</div>
+            <div className="text-yellow-200">• ドラッグで関節移動</div>
+          </div>
+        )}
       </div>
     </div>
   )
