@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Controls from '@/components/Controls'
+import Toolbar, { OperationMode } from '@/components/Toolbar'
 
 // Canvas3Dコンポーネントを動的インポート（SSR回避）
 const Canvas3D = dynamic(() => import('@/components/Canvas3D'), {
@@ -37,6 +38,11 @@ export default function Home() {
   const [currentPose, setCurrentPose] = useState<Pose | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [fileStatus, setFileStatus] = useState<FileStatus>({ model: false, background: false })
+
+  // 新しい状態管理
+  const [operationMode, setOperationMode] = useState<OperationMode>('view')
+  const [resetTrigger, setResetTrigger] = useState(0)
+  const [presetPose, setPresetPose] = useState<string | null>(null)
 
   // ファイルの存在確認
   useEffect(() => {
@@ -127,6 +133,37 @@ export default function Home() {
     console.log('ポーズを削除しました:', poseId)
   }
 
+  // 操作モード変更
+  const handleModeChange = (mode: OperationMode) => {
+    setOperationMode(mode)
+    console.log('操作モードを変更:', mode)
+  }
+
+  // ポーズリセット
+  const handleResetPose = () => {
+    setResetTrigger(prev => prev + 1)
+    setCurrentPose(null)
+    console.log('ポーズをリセット')
+  }
+
+  // プリセットポーズ適用
+  const handlePresetPose = (poseType: 'tpose' | 'relax' | 'sit') => {
+    setPresetPose(poseType)
+    console.log('プリセットポーズを適用:', poseType)
+
+    // プリセットポーズをクリア（一度だけ適用）
+    setTimeout(() => setPresetPose(null), 100)
+  }
+
+  // ポーズ変更時のハンドラ
+  const handlePoseChange = (poseData: {
+    model: { position: [number, number, number]; rotation: [number, number, number]; scale: [number, number, number] }
+    bones: Record<string, { position: [number, number, number]; rotation: [number, number, number]; quaternion: [number, number, number, number] }>
+  }) => {
+    console.log('ポーズが変更されました:', poseData)
+    // 必要に応じて現在のポーズ状態を更新
+  }
+
   if (isLoading) {
     return (
       <div className="w-full h-screen bg-gray-900 flex items-center justify-center">
@@ -146,9 +183,21 @@ export default function Home() {
       <Canvas3D
         modelUrl="/model.glb"
         backgroundImageUrl="/wall.jpg"
+        operationMode={operationMode}
+        onPoseChange={handlePoseChange}
+        resetTrigger={resetTrigger}
+        presetPose={presetPose}
       />
 
-      {/* コントロールパネル */}
+      {/* ツールバー（左上） */}
+      <Toolbar
+        currentMode={operationMode}
+        onModeChange={handleModeChange}
+        onResetPose={handleResetPose}
+        onPresetPose={handlePresetPose}
+      />
+
+      {/* コントロールパネル（右上） */}
       <Controls
         poses={poses}
         onPoseSave={handlePoseSave}
@@ -161,6 +210,7 @@ export default function Home() {
         <div className="absolute bottom-4 left-4 bg-black bg-opacity-80 text-white p-2 rounded text-xs">
           <div>現在のポーズ: {currentPose?.name || 'なし'}</div>
           <div>保存済みポーズ数: {poses.length}</div>
+          <div>操作モード: {operationMode}</div>
           <div>環境: {process.env.NODE_ENV}</div>
           <div>モデルファイル: {fileStatus.model ? '✅' : '❌'}</div>
           <div>背景画像: {fileStatus.background ? '✅' : '❌'}</div>
@@ -182,7 +232,7 @@ export default function Home() {
 
       {/* ファイル確認完了メッセージ（すべてのファイルが存在する場合） */}
       {missingFiles.length === 0 && process.env.NODE_ENV === 'development' && (
-        <div className="absolute bottom-4 right-4 text-white text-xs bg-green-900 bg-opacity-80 p-2 rounded">
+        <div className="absolute bottom-16 right-4 text-white text-xs bg-green-900 bg-opacity-80 p-2 rounded">
           ✅ すべてのファイルが正常に配置されています
         </div>
       )}
