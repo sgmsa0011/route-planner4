@@ -1,103 +1,191 @@
-import Image from "next/image";
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
+import Controls from '@/components/Controls'
+
+// Canvas3Dコンポーネントを動的インポート（SSR回避）
+const Canvas3D = dynamic(() => import('@/components/Canvas3D'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-screen bg-gray-900 flex items-center justify-center">
+      <div className="text-white text-xl">3Dシーンを読み込み中...</div>
+    </div>
+  )
+})
+
+interface PoseData {
+  joints: Record<string, { position: [number, number, number]; rotation: [number, number, number] }>
+  position: { x: number; y: number; z: number }
+  rotation: { x: number; y: number; z: number }
+}
+
+interface Pose {
+  id: string
+  name: string
+  data: PoseData
+  timestamp: number
+}
+
+interface FileStatus {
+  model: boolean
+  background: boolean
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [poses, setPoses] = useState<Pose[]>([])
+  const [currentPose, setCurrentPose] = useState<Pose | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [fileStatus, setFileStatus] = useState<FileStatus>({ model: false, background: false })
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // ファイルの存在確認
+  useEffect(() => {
+    const checkFiles = async () => {
+      try {
+        // モデルファイルの存在確認
+        const modelResponse = await fetch('/model.glb', { method: 'HEAD' })
+        const modelExists = modelResponse.ok
+
+        // 背景画像の存在確認
+        const backgroundResponse = await fetch('/wall.jpg', { method: 'HEAD' })
+        const backgroundExists = backgroundResponse.ok
+
+        setFileStatus({
+          model: modelExists,
+          background: backgroundExists
+        })
+
+        console.log('ファイル存在確認:', {
+          'model.glb': modelExists,
+          'wall.jpg': backgroundExists
+        })
+      } catch (error) {
+        console.error('ファイル存在確認エラー:', error)
+        setFileStatus({ model: false, background: false })
+      }
+    }
+
+    checkFiles()
+  }, [])
+
+  // ローカルストレージからポーズデータを読み込み
+  useEffect(() => {
+    try {
+      const savedPoses = localStorage.getItem('climbing-poses')
+      if (savedPoses) {
+        const parsedPoses = JSON.parse(savedPoses)
+        setPoses(Array.isArray(parsedPoses) ? parsedPoses : [])
+      }
+    } catch (error) {
+      console.error('ポーズデータの読み込みに失敗しました:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  // ポーズデータをローカルストレージに保存
+  useEffect(() => {
+    if (!isLoading) {
+      try {
+        localStorage.setItem('climbing-poses', JSON.stringify(poses))
+      } catch (error) {
+        console.error('ポーズデータの保存に失敗しました:', error)
+      }
+    }
+  }, [poses, isLoading])
+
+  const handlePoseSave = (pose: Pose) => {
+    setPoses(prev => {
+      const existingIndex = prev.findIndex(p => p.id === pose.id)
+      if (existingIndex >= 0) {
+        // 既存のポーズを更新
+        const updated = [...prev]
+        updated[existingIndex] = pose
+        return updated
+      } else {
+        // 新しいポーズを追加
+        return [...prev, pose]
+      }
+    })
+
+    console.log('ポーズを保存しました:', pose)
+  }
+
+  const handlePoseLoad = (pose: Pose) => {
+    setCurrentPose(pose)
+    // TODO: 実際のモデルにポーズを適用する処理を実装
+    console.log('ポーズを読み込みました:', pose)
+  }
+
+  const handlePoseDelete = (poseId: string) => {
+    setPoses(prev => prev.filter(p => p.id !== poseId))
+
+    if (currentPose?.id === poseId) {
+      setCurrentPose(null)
+    }
+
+    console.log('ポーズを削除しました:', poseId)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="w-full h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white text-xl">アプリケーションを読み込み中...</div>
+      </div>
+    )
+  }
+
+  // 不足しているファイルをリストアップ
+  const missingFiles = []
+  if (!fileStatus.model) missingFiles.push('model.glb')
+  if (!fileStatus.background) missingFiles.push('wall.jpg')
+
+  return (
+    <main className="relative w-full h-screen overflow-hidden">
+      {/* 3Dキャンバス */}
+      <Canvas3D
+        modelUrl="/model.glb"
+        backgroundImageUrl="/wall.jpg"
+      />
+
+      {/* コントロールパネル */}
+      <Controls
+        poses={poses}
+        onPoseSave={handlePoseSave}
+        onPoseLoad={handlePoseLoad}
+        onPoseDelete={handlePoseDelete}
+      />
+
+      {/* デバッグ情報（開発時のみ表示） */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="absolute bottom-4 left-4 bg-black bg-opacity-80 text-white p-2 rounded text-xs">
+          <div>現在のポーズ: {currentPose?.name || 'なし'}</div>
+          <div>保存済みポーズ数: {poses.length}</div>
+          <div>環境: {process.env.NODE_ENV}</div>
+          <div>モデルファイル: {fileStatus.model ? '✅' : '❌'}</div>
+          <div>背景画像: {fileStatus.background ? '✅' : '❌'}</div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+      )}
+
+      {/* ファイル不足警告（実際にファイルが存在しない場合のみ表示） */}
+      {missingFiles.length > 0 && (
+        <div className="absolute bottom-4 right-4 text-white text-xs bg-red-900 bg-opacity-90 p-3 rounded shadow-lg">
+          <div className="font-bold mb-1">⚠️ 必要なファイルが見つかりません</div>
+          <div className="text-xs text-red-200">publicフォルダに以下のファイルを配置してください：</div>
+          <ul className="mt-1 text-xs">
+            {missingFiles.map(file => (
+              <li key={file} className="ml-2">• {file}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ファイル確認完了メッセージ（すべてのファイルが存在する場合） */}
+      {missingFiles.length === 0 && process.env.NODE_ENV === 'development' && (
+        <div className="absolute bottom-4 right-4 text-white text-xs bg-green-900 bg-opacity-80 p-2 rounded">
+          ✅ すべてのファイルが正常に配置されています
+        </div>
+      )}
+    </main>
+  )
 }
