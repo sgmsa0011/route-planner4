@@ -72,6 +72,127 @@ function BackgroundWall({ imageUrl }: { imageUrl?: string }) {
       />
     </mesh>
   )
+  }
+
+// Magic Poser準拠：19個関節選択
+function selectMagicPoserJoints(allBones: THREE.Bone[]): THREE.Bone[] {
+  const selectedJoints: THREE.Bone[] = []
+  const usedNames = new Set<string>()
+
+  // Magic Poserの19個関節定義
+  const jointTargets = [
+    // 頭部・首 (2個)
+    { pattern: /head|skull/i, label: '頭部', priority: 1 },
+    { pattern: /neck/i, label: '首', priority: 1 },
+
+    // 胴体 (2個)
+    { pattern: /spine.*(?:chest|upper|1)/i, label: '胸部', priority: 1 },
+    { pattern: /pelvis|hips/i, label: '腰', priority: 1 },
+
+    // 腕関節 (6個)
+    { pattern: /(left|l).*shoulder/i, label: '左肩', priority: 2 },
+    { pattern: /(right|r).*shoulder/i, label: '右肩', priority: 2 },
+    { pattern: /(left|l).*(upperarm|arm)(?!.*hand)/i, label: '左上腕', priority: 2 },
+    { pattern: /(right|r).*(upperarm|arm)(?!.*hand)/i, label: '右上腕', priority: 2 },
+    { pattern: /(left|l).*forearm/i, label: '左前腕', priority: 2 },
+    { pattern: /(right|r).*forearm/i, label: '右前腕', priority: 2 },
+
+    // 手 (2個)
+    { pattern: /(left|l).*hand$/i, label: '左手', priority: 3 },
+    { pattern: /(right|r).*hand$/i, label: '右手', priority: 3 },
+
+    // 脚関節 (8個) - Mixamorig命名規則対応
+    { pattern: /(left|l).*upleg/i, label: '左太もも', priority: 2 },
+    { pattern: /(right|r).*upleg/i, label: '右太もも', priority: 2 },
+    { pattern: /(left|l).*leg(?!.*up)/i, label: '左すね', priority: 2 },
+    { pattern: /(right|r).*leg(?!.*up)/i, label: '右すね', priority: 2 },
+    { pattern: /(left|l).*foot(?!.*toe)/i, label: '左足首', priority: 3 },
+    { pattern: /(right|r).*foot(?!.*toe)/i, label: '右足首', priority: 3 },
+    { pattern: /(left|l).*toebase/i, label: '左足先', priority: 3 },
+    { pattern: /(right|r).*toebase/i, label: '右足先', priority: 3 }
+  ]
+
+    console.log('🎯 Magic Poser関節選択開始...')
+
+  // 🔍 実際の骨名をすべて表示（デバッグ用）
+  console.log('📋 利用可能な全骨名:')
+  allBones.forEach((bone, index) => {
+    console.log(`${index + 1}. ${bone.name}`)
+  })
+
+  // 除外すべきパターン
+  const excludePatterns = [
+    'finger', 'thumb', 'index', 'middle', 'ring', 'pinky',
+    'toe', 'end', 'twist', 'roll', 'bend', 'meta'
+  ]
+
+  // 各関節タイプに対して最適な骨を選択
+  jointTargets.forEach(target => {
+    const candidates = allBones.filter(bone => {
+      const name = bone.name.toLowerCase()
+
+      // 除外パターンのチェック
+      const shouldExclude = excludePatterns.some(exclude => name.includes(exclude))
+      if (shouldExclude) return false
+
+      // 既に使用済みの場合は除外
+      if (usedNames.has(bone.name)) return false
+
+      // ターゲットパターンにマッチするかチェック
+      return target.pattern.test(bone.name)
+    })
+
+    if (candidates.length > 0) {
+      // 名前が短く、シンプルなものを優先選択
+      const best = candidates.reduce((prev, curr) => {
+        const prevScore = prev.name.length + (prev.name.includes('twist') ? 100 : 0)
+        const currScore = curr.name.length + (curr.name.includes('twist') ? 100 : 0)
+        return currScore < prevScore ? curr : prev
+      })
+
+      selectedJoints.push(best)
+      usedNames.add(best.name)
+      console.log(`✅ ${target.label}: ${best.name}`)
+    } else {
+      console.log(`❌ ${target.label}: 見つからない`)
+    }
+  })
+
+  console.log(`🎯 拡張関節選択完了: ${selectedJoints.length}個（太もも・すね追加版）`)
+  return selectedJoints
+}
+
+// 関節の重要度情報取得
+function getJointInfo(boneName: string) {
+  const name = boneName.toLowerCase()
+
+  // 重要関節（赤色・大きめ）
+  if (name.includes('head') || name.includes('hand') || name.includes('foot')) {
+    return {
+      type: 'important',
+      size: 0.15,
+      color: '#ff6b6b',
+      label: boneName
+    }
+  }
+
+  // 脚関節（緑色・中サイズ）
+  if (name.includes('leg') || name.includes('hip')) {
+    return {
+      type: 'leg',
+      size: 0.12,
+      color: '#4CAF50',
+      label: boneName
+    }
+  }
+
+  // 一般関節（青色・標準）
+  return {
+    type: 'normal',
+    size: 0.1,
+    color: '#4ecdc4',
+    label: boneName
+  }
 }
 
 // 関節コントロールポイント（復活・改善版）
@@ -81,13 +202,15 @@ function JointControl({
   isVisible
 }: {
   bone: THREE.Bone
-  onDrag: (bone: THREE.Bone, position: THREE.Vector3) => void
+  onDrag: (bone: THREE.Bone, screenDelta: { x: number, y: number }) => void
   isVisible: boolean
 }) {
   const meshRef = useRef<THREE.Mesh>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const [worldPosition] = useState(new THREE.Vector3())
+  const [lastMousePos, setLastMousePos] = useState<{ x: number, y: number } | null>(null)
+  const jointInfo = getJointInfo(bone.name)
 
   useFrame(() => {
     if (meshRef.current && bone) {
@@ -97,22 +220,93 @@ function JointControl({
     }
   })
 
-  const handlePointerDown = useCallback((event: ThreeEvent<PointerEvent>) => {
+    const handlePointerDown = useCallback((event: ThreeEvent<PointerEvent>) => {
+    // 左クリックのみ受け付ける
+    if (event.nativeEvent.button !== 0) return
+
     event.stopPropagation()
+    event.nativeEvent.preventDefault()
     setIsDragging(true)
-  }, [])
 
-  const handlePointerUp = useCallback(() => {
-    setIsDragging(false)
-  }, [])
-
-  const handlePointerMove = useCallback((event: ThreeEvent<PointerEvent>) => {
-    if (isDragging) {
-      event.stopPropagation()
-      const newPosition = event.point
-      onDrag(bone, newPosition)
+        // 🎯 ドラッグ開始位置を記録
+    const startPos = {
+      x: event.nativeEvent.clientX,
+      y: event.nativeEvent.clientY
     }
-  }, [isDragging, bone, onDrag])
+    setLastMousePos(startPos)
+
+    console.log('✅ ドラッグ開始:', bone.name, '開始位置:', startPos)
+  }, [bone.name])
+
+    const handlePointerUp = useCallback((event: ThreeEvent<PointerEvent>) => {
+    if (!isDragging) return
+
+    event.stopPropagation()
+    event.nativeEvent.preventDefault()
+    setIsDragging(false)
+    setLastMousePos(null)
+
+    console.log('✅ ドラッグ終了:', bone.name)
+  }, [isDragging, bone.name])
+
+    const handlePointerMove = useCallback((event: ThreeEvent<PointerEvent>) => {
+    // デバッグログは実際にドラッグ中のみ
+    if (isDragging && lastMousePos) {
+      console.log('📍 [PointerMove] ドラッグ中のマウス移動:', bone.name, {
+        buttons: event.nativeEvent.buttons,
+        clientX: event.nativeEvent.clientX,
+        clientY: event.nativeEvent.clientY
+      })
+    }
+
+    if (!isDragging || !lastMousePos) {
+      // 不要なログを削除
+      return
+    }
+
+    // 🔧 重要：マウスボタンが実際に押されているかチェック
+    if (event.nativeEvent.buttons === 0) {
+      // ボタンが離されている場合はドラッグ終了
+      setIsDragging(false)
+      setLastMousePos(null)
+      console.log('✅ ボタンリリース検出でドラッグ終了:', bone.name)
+      return
+    }
+
+        // 左ボタンが押されている場合のみポーズ編集
+    if (event.nativeEvent.buttons === 1) {
+      event.stopPropagation()
+      event.nativeEvent.preventDefault()
+
+      // 🎯 マウス移動量（スクリーン座標）を計算
+      const currentMousePos = {
+        x: event.nativeEvent.clientX,
+        y: event.nativeEvent.clientY
+      }
+
+      const screenDelta = {
+        x: currentMousePos.x - lastMousePos.x,
+        y: currentMousePos.y - lastMousePos.y
+      }
+
+      console.log('🎯 [PointerMove] 関節:', bone.name, '移動量:', screenDelta)
+
+      // 微小な移動は無視（ノイズ対策）
+      if (Math.abs(screenDelta.x) > 1 || Math.abs(screenDelta.y) > 1) {
+        // 移動量を関節ドラッグハンドラーに渡す
+        console.log('🎯 [PointerMove] ドラッグハンドラー呼び出し開始')
+        onDrag(bone, screenDelta)
+        console.log('🎯 [PointerMove] ドラッグハンドラー呼び出し完了')
+      } else {
+        console.log('🎯 [PointerMove] 微小移動のため無視 - deltaX:', Math.abs(screenDelta.x), 'deltaY:', Math.abs(screenDelta.y))
+      }
+
+      // 次回計算用に現在位置を保存
+      setLastMousePos(currentMousePos)
+    } else {
+      console.log('⚠️ [PointerMove] ボタン状態が不正:', event.nativeEvent.buttons)
+    }
+  }, [isDragging, lastMousePos, bone, onDrag])
 
   const handlePointerEnter = useCallback(() => {
     setIsHovered(true)
@@ -120,19 +314,86 @@ function JointControl({
 
   const handlePointerLeave = useCallback(() => {
     setIsHovered(false)
+    // ポインターが関節から離れた場合、ドラッグ中でもホバー解除
   }, [])
+
+  // 🔧 グローバルマウスイベントでドラッグ状態を確実に管理
+  useEffect(() => {
+    if (!isDragging) return
+
+    console.log('🔧 [GlobalMouse] イベント登録:', bone.name)
+
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      if (!lastMousePos) return
+
+      // 左ボタンが押されている場合のみ
+      if (event.buttons === 1) {
+        const currentMousePos = {
+          x: event.clientX,
+          y: event.clientY
+        }
+
+        const screenDelta = {
+          x: currentMousePos.x - lastMousePos.x,
+          y: currentMousePos.y - lastMousePos.y
+        }
+
+        // 微小な移動は無視
+        if (Math.abs(screenDelta.x) > 1 || Math.abs(screenDelta.y) > 1) {
+          console.log('🔧 [GlobalMove] 関節:', bone.name, '移動量:', screenDelta)
+          onDrag(bone, screenDelta)
+          setLastMousePos(currentMousePos)
+        }
+      } else if (event.buttons === 0) {
+        // ボタンが離された場合はドラッグ終了
+        setIsDragging(false)
+        setLastMousePos(null)
+        console.log('✅ [GlobalMove] ボタンリリース検出でドラッグ終了:', bone.name)
+      }
+    }
+
+        const handleGlobalMouseUp = () => {
+      console.log('✅ [GlobalMouseUp] ドラッグ終了:', bone.name)
+      setIsDragging(false)
+      setLastMousePos(null)
+    }
+
+    const handleGlobalMouseLeave = () => {
+      console.log('✅ [GlobalMouseLeave] ドラッグ終了:', bone.name)
+      setIsDragging(false)
+      setLastMousePos(null)
+    }
+
+    // ドラッグ状態を強制リセットするタイマー（3秒後）
+    const resetTimer = setTimeout(() => {
+      if (isDragging) {
+        console.log('⏰ [AutoReset] 3秒経過でドラッグ状態をリセット:', bone.name)
+        setIsDragging(false)
+        setLastMousePos(null)
+      }
+    }, 3000)
+
+    // ウィンドウ全体でマウスアップを監視
+    window.addEventListener('mousemove', handleGlobalMouseMove)
+    window.addEventListener('mouseup', handleGlobalMouseUp)
+    window.addEventListener('mouseleave', handleGlobalMouseLeave)
+
+    return () => {
+      console.log('🔧 [GlobalMouse] イベント解除:', bone.name)
+      clearTimeout(resetTimer)
+      window.removeEventListener('mousemove', handleGlobalMouseMove)
+      window.removeEventListener('mouseup', handleGlobalMouseUp)
+      window.removeEventListener('mouseleave', handleGlobalMouseLeave)
+    }
+  }, [isDragging, lastMousePos, bone, onDrag])
 
   if (!isVisible) return null
 
-  // 関節の重要度に応じてサイズと色を調整
-  const isImportantJoint = bone.name.toLowerCase().includes('hand') ||
-                          bone.name.toLowerCase().includes('foot') ||
-                          bone.name.toLowerCase().includes('head') ||
-                          bone.name.toLowerCase().includes('spine')
-
-  const sphereSize = isImportantJoint ? 0.15 : 0.1
-  const baseColor = isImportantJoint ? '#ff6b6b' : '#4ecdc4'
-  const hoverColor = isImportantJoint ? '#ff9999' : '#6fe6dd'
+  // 関節情報に基づくサイズと色
+  const sphereSize = jointInfo.size
+  const baseColor = jointInfo.color
+  const hoverColor = jointInfo.type === 'important' ? '#ff9999' :
+                     jointInfo.type === 'leg' ? '#66BB6A' : '#6fe6dd'
   const dragColor = '#ffff00'
 
   return (
@@ -242,6 +503,22 @@ function HumanModel({
 
   const gltf = useGLTF(modelUrl || '/model.glb')
 
+  // 🔍 SkinnedMeshの更新状況監視
+  useFrame(() => {
+    if (modelRef.current) {
+      modelRef.current.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) {
+          child.skeleton.update()
+
+          // ポーズ編集中のみSkinnedMesh更新ログ
+          if (operationMode === 'pose') {
+            // console.log('🔍 [SkinnedMesh] 更新:', child.name)
+          }
+        }
+      })
+    }
+  })
+
   // モデル初期設定（ボーン情報含む）
   useEffect(() => {
     if (gltf.scene && modelRef.current) {
@@ -259,7 +536,9 @@ function HumanModel({
         }
       })
 
-      setBones(foundBones)
+      // Magic Poser準拠の19個関節のみを選択
+      const magicPoserJoints = selectMagicPoserJoints(foundBones)
+      setBones(magicPoserJoints)
       setOriginalPose(originalBoneData)
 
       // モデル位置設定
@@ -267,7 +546,7 @@ function HumanModel({
       modelRef.current.scale.copy(modelTransform.scale)
       modelRef.current.rotation.copy(modelTransform.rotation)
 
-      console.log('モデル読み込み完了:', foundBones.length, 'ボーン')
+      console.log('🎯 拡張ポーズ編集モデル読み込み完了:', magicPoserJoints.length, '個の主要関節')
 
       setTimeout(() => {
         setIsModelReady(true)
@@ -366,25 +645,145 @@ function HumanModel({
     }
   }, [resetTrigger, bones, originalPose, onPoseChange])
 
-  // 関節ドラッグハンドラー
-  const handleJointDrag = useCallback((bone: THREE.Bone, newPosition: THREE.Vector3) => {
-    // 簡易的なIK: 関節を新しい位置に向けて回転
-    const parent = bone.parent
-    if (parent && parent instanceof THREE.Bone) {
-      const currentPos = bone.getWorldPosition(new THREE.Vector3())
-      const parentPos = parent.getWorldPosition(new THREE.Vector3())
+    // 🔍 デバッグ強化：マウス移動とポーズ変更の詳細確認
+  const handleJointDrag = useCallback((bone: THREE.Bone, screenDelta: { x: number, y: number }) => {
+    const DEBUG_MODE = true  // デバッグモードのオンオフ
 
-      const currentDir = currentPos.clone().sub(parentPos).normalize()
-      const targetDir = newPosition.clone().sub(parentPos).normalize()
+    console.log('🔥 [handleJointDrag] 開始 - 関節:', bone.name, '移動量:', screenDelta)
 
-      const quaternion = new THREE.Quaternion().setFromUnitVectors(currentDir, targetDir)
-      parent.quaternion.multiply(quaternion)
+    if (DEBUG_MODE) {
+      console.log('🔍 [ドラッグ詳細] 関節:', bone.name)
+      console.log('🔍 [マウス移動量] X:', screenDelta.x, 'Y:', screenDelta.y)
     }
+
+    // 回転前の骨の状態を記録
+    const beforeRotation = {
+      x: bone.rotation.x,
+      y: bone.rotation.y,
+      z: bone.rotation.z
+    }
+
+    // カメラの向きを考慮した回転処理
+    const SENSITIVITY = 0.02  // 🔧 調整可能：回転感度
+
+    // スクリーン座標での移動を回転に変換
+    const rotationY = screenDelta.x * SENSITIVITY  // 左右移動 → Y軸回転
+    const rotationX = -screenDelta.y * SENSITIVITY // 上下移動 → X軸回転
+
+    if (DEBUG_MODE) {
+      console.log('🔍 [計算された回転量] X:', rotationX, 'Y:', rotationY)
+    }
+
+    // 骨の名前に基づく適切な回転軸を選択
+    const boneName = bone.name.toLowerCase()
+
+    console.log('🔍 [ボーン判定] 名前:', boneName)
+
+    if (boneName.includes('foot')) {
+      // 足首：より大きな動きで自然なキック
+      console.log('🦵 [足首回転] 実行開始')
+      bone.rotation.x += rotationX * 3.0  // 上下移動で前後キック（大きく）
+      bone.rotation.z += rotationY * 1.5  // 左右移動で内外旋
+      console.log('🦵 [足首回転] 完了')
+
+      // 🔥 連動して太ももとすねも動かす（キック動作らしく）
+      const isLeft = boneName.includes('left')
+      const thighName = isLeft ? 'mixamorigleftupleg' : 'mixamorigrightupleg'
+      const shinName = isLeft ? 'mixamorigleftleg' : 'mixamorigrightleg'
+
+      console.log('🔍 [連動回転] 対象:', { isLeft, thighName, shinName })
+
+      // 関連する骨を探して連動回転
+      if (bone.parent) {
+        bone.parent.traverse((child) => {
+          if (child instanceof THREE.Bone) {
+            const childName = child.name.toLowerCase()
+            if (childName.includes('upleg') && childName.includes(isLeft ? 'left' : 'right')) {
+              // 太もも：キック時に連動
+              console.log('🦵 [太もも連動] 回転:', child.name)
+              child.rotation.x += rotationX * 1.5
+            } else if (childName.includes('leg') && !childName.includes('up') && childName.includes(isLeft ? 'left' : 'right')) {
+              // すね：キック時に連動
+              console.log('🦵 [すね連動] 回転:', child.name)
+              child.rotation.x += rotationX * 1.2
+            }
+          }
+        })
+      }
+    } else if (boneName.includes('leg') && boneName.includes('up')) {
+      // 太もも：股関節の動き
+      console.log('🦵 [太もも回転] 実行')
+      bone.rotation.x += rotationX * 2.5  // 脚の前後移動
+      bone.rotation.z += rotationY * 1.2  // 脚の開閉
+    } else if (boneName.includes('leg') && !boneName.includes('up')) {
+      // すね：膝の曲げ伸ばし
+      console.log('🦵 [すね回転] 実行')
+      bone.rotation.x += rotationX * 2.0  // 膝の曲げ伸ばし
+      bone.rotation.y += rotationY * 0.8  // すねの回転
+    } else if (boneName.includes('hand') || boneName.includes('arm')) {
+      // 手・腕：自然な腕の動き
+      console.log('💪 [腕回転] 実行')
+      bone.rotation.z += rotationY * 1.5  // 左右移動で腕の開閉
+      bone.rotation.x += rotationX * 1.0  // 上下移動で腕の上下
+    } else if (boneName.includes('head')) {
+      // 頭：首の回転
+      console.log('🗣️ [頭回転] 実行')
+      bone.rotation.y += rotationY * 0.8  // 左右移動で首振り
+      bone.rotation.x += rotationX * 0.5  // 上下移動でうなずき
+    } else if (boneName.includes('spine')) {
+      // 胴体：体幹の回転
+      console.log('🫁 [胴体回転] 実行')
+      bone.rotation.y += rotationY * 0.6  // 左右移動で体の回転
+      bone.rotation.x += rotationX * 0.3  // 上下移動で前屈・後屈
+    } else {
+      // その他：基本的な回転
+      console.log('🔧 [その他回転] 実行')
+      bone.rotation.x += rotationX
+      bone.rotation.y += rotationY
+      console.log('🔍 [その他の関節] 基本回転適用')
+    }
+
+    // 回転後の骨の状態を記録
+    const afterRotation = {
+      x: bone.rotation.x,
+      y: bone.rotation.y,
+      z: bone.rotation.z
+    }
+
+    // 実際の変化量を確認
+    const actualChange = {
+      x: afterRotation.x - beforeRotation.x,
+      y: afterRotation.y - beforeRotation.y,
+      z: afterRotation.z - beforeRotation.z
+    }
+
+        if (DEBUG_MODE) {
+      console.log('🔍 [回転前]', beforeRotation)
+      console.log('🔍 [回転後]', afterRotation)
+      console.log('🔍 [実際の変化量]', actualChange)
+      console.log('🔍 [マトリックス更新] 実行開始')
+    }
+
+    // 🔥 重要：骨の更新を強制実行
+    bone.updateMatrix()
+    bone.updateMatrixWorld(true)
+
+    console.log('🔥 [handleJointDrag] マトリックス更新完了')
 
     if (onPoseChange) {
+      console.log('🔥 [handleJointDrag] ポーズ変更通知開始')
       const poseData = extractCurrentPose()
       onPoseChange(poseData)
+      console.log('🔥 [handleJointDrag] ポーズ変更通知完了')
+
+      if (DEBUG_MODE) {
+        console.log('🔍 [ポーズ変更通知] 送信完了')
+      }
+    } else {
+      console.log('⚠️ [handleJointDrag] onPoseChangeが未定義')
     }
+
+    console.log('🔥 [handleJointDrag] 処理完了')
   }, [onPoseChange])
 
   // 現在のポーズ抽出
@@ -610,14 +1009,16 @@ export default function Canvas3D({
             <div className="text-green-200">• ESC: 選択解除</div>
           </div>
         )}
-        {operationMode === 'pose' && (
-          <div className="text-xs space-y-1">
-            <div className="text-gray-300">ポーズ編集:</div>
-            <div className="text-red-200">• 赤球: 重要関節（手・足・頭）</div>
-            <div className="text-cyan-200">• 青球: 一般関節</div>
-            <div className="text-yellow-200">• ドラッグで関節移動</div>
-          </div>
-        )}
+                 {operationMode === 'pose' && (
+           <div className="text-xs space-y-1">
+             <div className="text-gray-300">ポーズ編集 (デバッグ強化版):</div>
+             <div className="text-red-200">• 赤球: 重要関節（手・足・頭）</div>
+             <div className="text-green-200">• 緑球: 脚関節（太もも・すね）</div>
+             <div className="text-cyan-200">• 青球: 一般関節（肩・腕・胴体）</div>
+             <div className="text-yellow-200">• ドラッグで関節移動・連動動作</div>
+             <div className="text-orange-200">🔍 コンソールでドラッグ詳細確認可能</div>
+           </div>
+         )}
       </div>
     </div>
   )
