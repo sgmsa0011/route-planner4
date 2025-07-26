@@ -103,6 +103,7 @@ export default function Controls({
       }
     }
     reader.readAsText(file)
+    event.target.value = '' // reset input so same file can be selected again
   }, [onPoseSave])
 
   return (
