@@ -204,7 +204,7 @@ export default function Home() {
 
       {/* デバッグ情報（開発時のみ表示） */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="absolute bottom-24 left-4 bg-black bg-opacity-80 text-white p-2 rounded text-xs">
+        <div className="absolute bottom-4 left-4 bg-black bg-opacity-80 text-white p-2 rounded text-xs">
           <div>現在のポーズ: {currentPose?.name || 'なし'}</div>
           <div>保存済みポーズ数: {poses.length}</div>
           <div>操作モード: {operationMode}</div>

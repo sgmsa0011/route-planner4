@@ -913,7 +913,7 @@ export default function Canvas3D({
       )}
 
       {/* 現在のモード表示 */}
-      <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 text-white p-2 rounded text-sm">
+      <div className="absolute bottom-4 right-4 bg-black bg-opacity-70 text-white p-2 rounded text-sm">
         現在のモード: {operationMode}
         {operationMode === 'view' && <div className="text-xs text-gray-300">マウスで視点操作可能</div>}
         {operationMode === 'transform' && (
