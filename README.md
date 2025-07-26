@@ -75,7 +75,8 @@ route-planner4/
 │   │   └── globals.css           # グローバルスタイル
 │   ├── components/
 │   │   ├── Canvas3D.tsx          # 3Dシーンコンポーネント
-│   │   └── Controls.tsx          # UIコントロールパネル
+│   │   ├── Controls.tsx          # UIコントロールパネル
+│   │   └── Toolbar.tsx           # ツールバー
 │   └── lib/
 │       └── ik.ts                 # IK制御とポーズ管理のロジック
 ├── public/
