@@ -204,7 +204,7 @@ export default function Home() {
 
       {/* デバッグ情報（開発時のみ表示） */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="absolute bottom-4 left-4 bg-black bg-opacity-80 text-white p-2 rounded text-xs">
+        <div className="absolute bottom-24 left-4 bg-black bg-opacity-80 text-white p-2 rounded text-xs">
           <div>現在のポーズ: {currentPose?.name || 'なし'}</div>
           <div>保存済みポーズ数: {poses.length}</div>
           <div>操作モード: {operationMode}</div>
@@ -227,12 +227,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* ファイル確認完了メッセージ（すべてのファイルが存在する場合） */}
-      {missingFiles.length === 0 && process.env.NODE_ENV === 'development' && (
-        <div className="absolute bottom-16 right-4 text-white text-xs bg-green-900 bg-opacity-80 p-2 rounded">
-          ✅ すべてのファイルが正常に配置されています
-        </div>
-      )}
     </main>
   )
 }
