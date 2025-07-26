@@ -501,8 +501,9 @@ function HumanModel({
   const [originalPose, setOriginalPose] = useState<Record<string, BoneData> | null>(null)
   const [modelTransform, setModelTransform] = useState({
     position: new THREE.Vector3(0, -1, 0),
-    rotation: new THREE.Euler(0, 0, 0),
-    scale: new THREE.Vector3(1, 1, 1)
+    // 初期向きを後ろ向き(180度回転)にし、大きさを1.5倍に設定
+    rotation: new THREE.Euler(0, Math.PI, 0),
+    scale: new THREE.Vector3(1.5, 1.5, 1.5)
   })
 
   const gltf = useGLTF(modelUrl || '/model.glb')
@@ -734,8 +735,9 @@ function HumanModel({
       <primitive
         ref={modelRef}
         object={gltf.scene}
-        position={[0, -1, 0]}
-        scale={[1, 1, 1]}
+        position={modelTransform.position}
+        rotation={modelTransform.rotation}
+        scale={modelTransform.scale}
       />
 
       {/* TransformControls（拡張版） */}
@@ -749,7 +751,13 @@ function HumanModel({
           size={1}
           space={transformMode === 'rotate' ? 'local' : 'world'}
           onObjectChange={() => {
-            if (onPoseChange && modelRef.current) {
+            if (modelRef.current) {
+              // スケールモードでは縦横比を維持する
+              if (transformMode === 'scale') {
+                const uniform = modelRef.current.scale.x
+                modelRef.current.scale.set(uniform, uniform, uniform)
+              }
+
               // モデル変形を記録
               setModelTransform({
                 position: modelRef.current.position.clone(),
@@ -757,8 +765,10 @@ function HumanModel({
                 scale: modelRef.current.scale.clone()
               })
 
-              const poseData = extractCurrentPose()
-              onPoseChange(poseData)
+              if (onPoseChange) {
+                const poseData = extractCurrentPose()
+                onPoseChange(poseData)
+              }
             }
           }}
         />
