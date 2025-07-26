@@ -1,12 +1,9 @@
 'use client'
 
 import React, { useState, useCallback } from 'react'
+import type { CanvasPoseData } from './Canvas3D'
 
-interface PoseData {
-  joints: Record<string, { position: [number, number, number]; rotation: [number, number, number] }>
-  position: { x: number; y: number; z: number }
-  rotation: { x: number; y: number; z: number }
-}
+type PoseData = CanvasPoseData
 
 interface Pose {
   id: string
@@ -42,10 +39,9 @@ export default function Controls({
       id: `pose_${Date.now()}`,
       name: currentPoseName.trim(),
       data: {
-        // TODO: 実際の関節データを取得
-        joints: {},
-        position: { x: 0, y: 0, z: 0 },
-        rotation: { x: 0, y: 0, z: 0 }
+        // Placeholder values, actual data is supplied by parent
+        model: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        bones: {}
       },
       timestamp: Date.now()
     }
