@@ -501,6 +501,9 @@ function HumanModel({
     scale: new THREE.Vector3(1, 1, 1)
   })
 
+  // カメラ参照を取得してドラッグ操作に活用
+  const { camera } = useThree()
+
   const gltf = useGLTF(modelUrl || '/model.glb')
 
   // 🔍 SkinnedMeshの更新状況監視
@@ -656,135 +659,55 @@ function HumanModel({
       console.log('🔍 [マウス移動量] X:', screenDelta.x, 'Y:', screenDelta.y)
     }
 
-    // 回転前の骨の状態を記録
-    const beforeRotation = {
-      x: bone.rotation.x,
-      y: bone.rotation.y,
-      z: bone.rotation.z
+    // カメラ基準の回転軸を計算
+    const forward = new THREE.Vector3()
+    camera.getWorldDirection(forward)
+    const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize()
+
+    // 角度計算
+    const SENSITIVITY = 0.005
+    const yaw = screenDelta.x * SENSITIVITY
+    const pitch = -screenDelta.y * SENSITIVITY
+
+    // ボーン種類に応じて回転量を調整
+    const name = bone.name.toLowerCase()
+    let yawFactor = 1
+    let pitchFactor = 1
+    if (name.includes('foot')) {
+      yawFactor = 1.5
+      pitchFactor = 3.0
+    } else if (name.includes('leg') && name.includes('up')) {
+      yawFactor = 1.2
+      pitchFactor = 2.5
+    } else if (name.includes('leg')) {
+      yawFactor = 0.8
+      pitchFactor = 2.0
+    } else if (name.includes('hand') || name.includes('arm')) {
+      yawFactor = 1.5
+      pitchFactor = 1.0
+    } else if (name.includes('head')) {
+      yawFactor = 0.8
+      pitchFactor = 0.5
+    } else if (name.includes('spine')) {
+      yawFactor = 0.6
+      pitchFactor = 0.3
     }
 
-    // カメラの向きを考慮した回転処理
-    const SENSITIVITY = 0.02  // 🔧 調整可能：回転感度
+    // 回転適用
+    bone.rotateOnWorldAxis(right, pitch * pitchFactor)
+    bone.rotateOnWorldAxis(camera.up, yaw * yawFactor)
 
-    // スクリーン座標での移動を回転に変換
-    const rotationY = screenDelta.x * SENSITIVITY  // 左右移動 → Y軸回転
-    const rotationX = -screenDelta.y * SENSITIVITY // 上下移動 → X軸回転
-
-    if (DEBUG_MODE) {
-      console.log('🔍 [計算された回転量] X:', rotationX, 'Y:', rotationY)
-    }
-
-    // 骨の名前に基づく適切な回転軸を選択
-    const boneName = bone.name.toLowerCase()
-
-    console.log('🔍 [ボーン判定] 名前:', boneName)
-
-    if (boneName.includes('foot')) {
-      // 足首：より大きな動きで自然なキック
-      console.log('🦵 [足首回転] 実行開始')
-      bone.rotation.x += rotationX * 3.0  // 上下移動で前後キック（大きく）
-      bone.rotation.z += rotationY * 1.5  // 左右移動で内外旋
-      console.log('🦵 [足首回転] 完了')
-
-      // 🔥 連動して太ももとすねも動かす（キック動作らしく）
-      const isLeft = boneName.includes('left')
-      const thighName = isLeft ? 'mixamorigleftupleg' : 'mixamorigrightupleg'
-      const shinName = isLeft ? 'mixamorigleftleg' : 'mixamorigrightleg'
-
-      console.log('🔍 [連動回転] 対象:', { isLeft, thighName, shinName })
-
-      // 関連する骨を探して連動回転
-      if (bone.parent) {
-        bone.parent.traverse((child) => {
-          if (child instanceof THREE.Bone) {
-            const childName = child.name.toLowerCase()
-            if (childName.includes('upleg') && childName.includes(isLeft ? 'left' : 'right')) {
-              // 太もも：キック時に連動
-              console.log('🦵 [太もも連動] 回転:', child.name)
-              child.rotation.x += rotationX * 1.5
-            } else if (childName.includes('leg') && !childName.includes('up') && childName.includes(isLeft ? 'left' : 'right')) {
-              // すね：キック時に連動
-              console.log('🦵 [すね連動] 回転:', child.name)
-              child.rotation.x += rotationX * 1.2
-            }
-          }
-        })
-      }
-    } else if (boneName.includes('leg') && boneName.includes('up')) {
-      // 太もも：股関節の動き
-      console.log('🦵 [太もも回転] 実行')
-      bone.rotation.x += rotationX * 2.5  // 脚の前後移動
-      bone.rotation.z += rotationY * 1.2  // 脚の開閉
-    } else if (boneName.includes('leg') && !boneName.includes('up')) {
-      // すね：膝の曲げ伸ばし
-      console.log('🦵 [すね回転] 実行')
-      bone.rotation.x += rotationX * 2.0  // 膝の曲げ伸ばし
-      bone.rotation.y += rotationY * 0.8  // すねの回転
-    } else if (boneName.includes('hand') || boneName.includes('arm')) {
-      // 手・腕：自然な腕の動き
-      console.log('💪 [腕回転] 実行')
-      bone.rotation.z += rotationY * 1.5  // 左右移動で腕の開閉
-      bone.rotation.x += rotationX * 1.0  // 上下移動で腕の上下
-    } else if (boneName.includes('head')) {
-      // 頭：首の回転
-      console.log('🗣️ [頭回転] 実行')
-      bone.rotation.y += rotationY * 0.8  // 左右移動で首振り
-      bone.rotation.x += rotationX * 0.5  // 上下移動でうなずき
-    } else if (boneName.includes('spine')) {
-      // 胴体：体幹の回転
-      console.log('🫁 [胴体回転] 実行')
-      bone.rotation.y += rotationY * 0.6  // 左右移動で体の回転
-      bone.rotation.x += rotationX * 0.3  // 上下移動で前屈・後屈
-    } else {
-      // その他：基本的な回転
-      console.log('🔧 [その他回転] 実行')
-      bone.rotation.x += rotationX
-      bone.rotation.y += rotationY
-      console.log('🔍 [その他の関節] 基本回転適用')
-    }
-
-    // 回転後の骨の状態を記録
-    const afterRotation = {
-      x: bone.rotation.x,
-      y: bone.rotation.y,
-      z: bone.rotation.z
-    }
-
-    // 実際の変化量を確認
-    const actualChange = {
-      x: afterRotation.x - beforeRotation.x,
-      y: afterRotation.y - beforeRotation.y,
-      z: afterRotation.z - beforeRotation.z
-    }
-
-        if (DEBUG_MODE) {
-      console.log('🔍 [回転前]', beforeRotation)
-      console.log('🔍 [回転後]', afterRotation)
-      console.log('🔍 [実際の変化量]', actualChange)
-      console.log('🔍 [マトリックス更新] 実行開始')
-    }
-
-    // 🔥 重要：骨の更新を強制実行
+    // 更新を確実に反映
     bone.updateMatrix()
     bone.updateMatrixWorld(true)
 
-    console.log('🔥 [handleJointDrag] マトリックス更新完了')
-
     if (onPoseChange) {
-      console.log('🔥 [handleJointDrag] ポーズ変更通知開始')
       const poseData = extractCurrentPose()
       onPoseChange(poseData)
-      console.log('🔥 [handleJointDrag] ポーズ変更通知完了')
-
-      if (DEBUG_MODE) {
-        console.log('🔍 [ポーズ変更通知] 送信完了')
-      }
-    } else {
-      console.log('⚠️ [handleJointDrag] onPoseChangeが未定義')
     }
 
     console.log('🔥 [handleJointDrag] 処理完了')
-  }, [onPoseChange])
+  }, [camera, onPoseChange, extractCurrentPose])
 
   // 現在のポーズ抽出
   const extractCurrentPose = useCallback((): PoseData => {
