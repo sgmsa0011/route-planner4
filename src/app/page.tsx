@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Controls from '@/components/Controls'
 import Toolbar, { OperationMode } from '@/components/Toolbar'
+import type { CanvasPoseData } from '@/components/Canvas3D'
 
 // Canvas3Dコンポーネントを動的インポート（SSR回避）
 const Canvas3D = dynamic(() => import('@/components/Canvas3D'), {
@@ -15,16 +16,10 @@ const Canvas3D = dynamic(() => import('@/components/Canvas3D'), {
   )
 })
 
-interface PoseData {
-  joints: Record<string, { position: [number, number, number]; rotation: [number, number, number] }>
-  position: { x: number; y: number; z: number }
-  rotation: { x: number; y: number; z: number }
-}
-
 interface Pose {
   id: string
   name: string
-  data: PoseData
+  data: CanvasPoseData
   timestamp: number
 }
 
@@ -43,6 +38,8 @@ export default function Home() {
   const [operationMode, setOperationMode] = useState<OperationMode>('view')
   const [resetTrigger, setResetTrigger] = useState(0)
   const [presetPose, setPresetPose] = useState<string | null>(null)
+  const [currentPoseData, setCurrentPoseData] = useState<CanvasPoseData | null>(null)
+  const [poseToLoad, setPoseToLoad] = useState<CanvasPoseData | null>(null)
 
   // ファイルの存在確認
   useEffect(() => {
@@ -101,6 +98,9 @@ export default function Home() {
   }, [poses, isLoading])
 
   const handlePoseSave = (pose: Pose) => {
+    if (currentPoseData) {
+      pose = { ...pose, data: currentPoseData }
+    }
     setPoses(prev => {
       const existingIndex = prev.findIndex(p => p.id === pose.id)
       if (existingIndex >= 0) {
@@ -119,7 +119,7 @@ export default function Home() {
 
   const handlePoseLoad = (pose: Pose) => {
     setCurrentPose(pose)
-    // TODO: 実際のモデルにポーズを適用する処理を実装
+    setPoseToLoad({ ...pose.data })
     console.log('ポーズを読み込みました:', pose)
   }
 
@@ -156,12 +156,8 @@ export default function Home() {
   }
 
   // ポーズ変更時のハンドラ
-  const handlePoseChange = (poseData: {
-    model: { position: [number, number, number]; rotation: [number, number, number]; scale: [number, number, number] }
-    bones: Record<string, { position: [number, number, number]; rotation: [number, number, number]; quaternion: [number, number, number, number] }>
-  }) => {
-    console.log('ポーズが変更されました:', poseData)
-    // 必要に応じて現在のポーズ状態を更新
+  const handlePoseChange = (poseData: CanvasPoseData) => {
+    setCurrentPoseData(poseData)
   }
 
   if (isLoading) {
@@ -187,6 +183,7 @@ export default function Home() {
         onPoseChange={handlePoseChange}
         resetTrigger={resetTrigger}
         presetPose={presetPose}
+        loadPoseData={poseToLoad}
       />
 
       {/* ツールバー（左上） */}

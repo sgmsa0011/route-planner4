@@ -6,7 +6,7 @@ import { OrbitControls, Environment, Grid, useGLTF, useTexture, TransformControl
 import * as THREE from 'three'
 import { OperationMode } from './Toolbar'
 
-interface PoseData {
+export interface CanvasPoseData {
   model: {
     position: [number, number, number]
     rotation: [number, number, number]
@@ -29,9 +29,10 @@ interface SceneProps {
   modelUrl?: string
   backgroundImageUrl?: string
   operationMode: OperationMode
-  onPoseChange?: (poseData: PoseData) => void
+  onPoseChange?: (poseData: CanvasPoseData) => void
   resetTrigger?: number
   presetPose?: string | null
+  loadPoseData?: CanvasPoseData | null
 }
 
 // 背景壁コンポーネント（アスペクト比対応）
@@ -482,13 +483,15 @@ function HumanModel({
   operationMode,
   onPoseChange,
   resetTrigger,
-  presetPose
+  presetPose,
+  loadPoseData
 }: {
   modelUrl?: string
   operationMode: OperationMode
-  onPoseChange?: (poseData: PoseData) => void
+  onPoseChange?: (poseData: CanvasPoseData) => void
   resetTrigger?: number
   presetPose?: string | null
+  loadPoseData?: CanvasPoseData | null
 }) {
   const modelRef = useRef<THREE.Group>(null)
   const [isModelReady, setIsModelReady] = useState(false)
@@ -645,6 +648,31 @@ function HumanModel({
     }
   }, [resetTrigger, bones, originalPose, onPoseChange])
 
+  // 外部からポーズデータを読み込んだときの適用処理
+  useEffect(() => {
+    if (loadPoseData && modelRef.current) {
+      // モデルの位置・回転・スケールを適用
+      modelRef.current.position.fromArray(loadPoseData.model.position)
+      modelRef.current.rotation.fromArray(loadPoseData.model.rotation as [number, number, number])
+      modelRef.current.scale.fromArray(loadPoseData.model.scale)
+
+      // 各ボーンのデータを適用
+      modelRef.current.traverse((child) => {
+        if (child instanceof THREE.Bone && loadPoseData.bones[child.name]) {
+          const data = loadPoseData.bones[child.name]
+          child.position.fromArray(data.position)
+          child.rotation.fromArray(data.rotation as [number, number, number])
+          child.quaternion.fromArray(data.quaternion)
+        }
+      })
+
+      if (onPoseChange) {
+        const poseData = extractCurrentPose()
+        onPoseChange(poseData)
+      }
+    }
+  }, [loadPoseData])
+
     // 🔍 デバッグ強化：マウス移動とポーズ変更の詳細確認
   const handleJointDrag = useCallback((bone: THREE.Bone, screenDelta: { x: number, y: number }) => {
     const DEBUG_MODE = true  // デバッグモードのオンオフ
@@ -787,8 +815,8 @@ function HumanModel({
   }, [onPoseChange])
 
   // 現在のポーズ抽出
-  const extractCurrentPose = useCallback((): PoseData => {
-    const poseData: PoseData = {
+  const extractCurrentPose = useCallback((): CanvasPoseData => {
+    const poseData: CanvasPoseData = {
       model: {
         position: modelRef.current?.position.toArray() as [number, number, number] || [0, -1, 0],
         rotation: modelRef.current?.rotation.toArray().slice(0, 3) as [number, number, number] || [0, 0, 0],
@@ -894,7 +922,8 @@ function Scene({
   operationMode,
   onPoseChange,
   resetTrigger,
-  presetPose
+  presetPose,
+  loadPoseData
 }: SceneProps) {
   return (
     <>
@@ -913,6 +942,7 @@ function Scene({
           onPoseChange={onPoseChange}
           resetTrigger={resetTrigger}
           presetPose={presetPose}
+          loadPoseData={loadPoseData}
         />
       </Suspense>
 
@@ -938,7 +968,8 @@ export default function Canvas3D({
   operationMode = 'view',
   onPoseChange,
   resetTrigger,
-  presetPose
+  presetPose,
+  loadPoseData
 }: SceneProps) {
   const [debugInfo, setDebugInfo] = useState({
     camera: [0, 0, 0],
@@ -981,6 +1012,7 @@ export default function Canvas3D({
           onPoseChange={onPoseChange}
           resetTrigger={resetTrigger}
           presetPose={presetPose}
+          loadPoseData={loadPoseData}
         />
       </Canvas>
 
