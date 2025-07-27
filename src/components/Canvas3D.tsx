@@ -524,6 +524,8 @@ function HumanModel({
   loadPoseData?: CanvasPoseData | null
 }) {
   const modelRef = useRef<THREE.Group>(null)
+  const innerModelRef = useRef<THREE.Group>(null)
+  const [waistOffset, setWaistOffset] = useState(new THREE.Vector3(0, 0, 0))
   const [isModelReady, setIsModelReady] = useState(false)
   const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate')
   const [bones, setBones] = useState<THREE.Bone[]>([])
@@ -578,10 +580,13 @@ function HumanModel({
       setHeadBone(head)
       setOriginalPose(originalBoneData)
 
-      // モデル位置設定
-      modelRef.current.position.copy(modelTransform.position)
-      modelRef.current.scale.copy(modelTransform.scale)
-      modelRef.current.rotation.copy(modelTransform.rotation)
+      // ウエスト位置を計算
+      const bbox = new THREE.Box3().setFromObject(gltf.scene)
+      const height = bbox.max.y - bbox.min.y
+      const waist = new THREE.Vector3(0, bbox.min.y + height * 0.5, 0)
+      setWaistOffset(waist)
+
+      // モデル位置設定はJSX側で行うため、ここではオフセットのみ更新
 
       console.log('🎯 拡張ポーズ編集モデル読み込み完了:', magicPoserJoints.length, '個の主要関節')
 
@@ -589,7 +594,7 @@ function HumanModel({
         setIsModelReady(true)
       }, 200)
     }
-  }, [gltf.scene, modelTransform])
+  }, [gltf.scene])
 
   // プリセットポーズ適用
   useEffect(() => {
@@ -686,7 +691,9 @@ function HumanModel({
   useEffect(() => {
     if (loadPoseData && modelRef.current) {
       // モデルの位置・回転・スケールを適用
-      modelRef.current.position.fromArray(loadPoseData.model.position)
+      modelRef.current.position
+        .fromArray(loadPoseData.model.position)
+        .add(waistOffset)
       modelRef.current.rotation.fromArray(loadPoseData.model.rotation as [number, number, number])
       modelRef.current.scale.fromArray(loadPoseData.model.scale)
 
@@ -705,7 +712,7 @@ function HumanModel({
         onPoseChange(poseData)
       }
     }
-  }, [loadPoseData])
+  }, [loadPoseData, waistOffset])
 
     // 🔍 デバッグ強化：マウス移動とポーズ変更の詳細確認
   // 現在のポーズ抽出
@@ -806,13 +813,18 @@ function HumanModel({
       />
 
       {/* 3Dモデル */}
-      <primitive
+      <group
         ref={modelRef}
-        object={gltf.scene}
-        position={modelTransform.position}
+        position={modelTransform.position.clone().add(waistOffset)}
         rotation={modelTransform.rotation}
         scale={modelTransform.scale}
-      />
+      >
+        <primitive
+          ref={innerModelRef}
+          object={gltf.scene}
+          position={waistOffset.clone().negate()}
+        />
+      </group>
 
       {/* 頭部クリック検出 */}
       {headBone && (
@@ -843,7 +855,9 @@ function HumanModel({
 
               // モデル変形を記録
               setModelTransform({
-                position: modelRef.current.position.clone(),
+                position: modelRef.current.position
+                  .clone()
+                  .sub(waistOffset),
                 rotation: modelRef.current.rotation.clone(),
                 scale: modelRef.current.scale.clone()
               })
