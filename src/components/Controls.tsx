@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { CanvasPoseData } from './Canvas3D'
 
 type PoseData = CanvasPoseData
@@ -27,6 +28,7 @@ export default function Controls({
   onPlay,
   poses = []
 }: ControlsProps) {
+  const router = useRouter()
   const [currentPoseName, setCurrentPoseName] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const [selectedPose, setSelectedPose] = useState<string | null>(null)
@@ -111,8 +113,13 @@ export default function Controls({
   return (
     <div className="absolute top-4 right-4 bg-black bg-opacity-80 text-white p-4 rounded-lg shadow-lg min-w-80">
       {/* ヘッダー */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold">ステップ管理</h3>
+      <div className="flex items-center justify-between mb-2">
+        <button
+          onClick={() => router.push('/')}
+          className="text-xs bg-blue-600 px-2 py-1 rounded hover:bg-blue-500 transition-colors"
+        >
+          トップへ戻る
+        </button>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="text-xs bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 transition-colors"
@@ -120,6 +127,7 @@ export default function Controls({
           {isExpanded ? '縮小' : '展開'}
         </button>
       </div>
+      <h3 className="text-lg font-bold mb-2">ステップ管理</h3>
 
       {/* ステップ保存セクション */}
       <div className="mb-4">
