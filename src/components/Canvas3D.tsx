@@ -592,11 +592,19 @@ function HumanModel({
       setHeadBone(head)
       setOriginalPose(originalBoneData)
 
-      // ウエスト位置を計算
-      const bbox = new THREE.Box3().setFromObject(gltf.scene)
-      const height = bbox.max.y - bbox.min.y
-      const waist = new THREE.Vector3(0, bbox.min.y + height * 0.5, 0)
-      setWaistOffset(waist)
+      // ウエスト位置を計算（骨があれば優先）
+      const pelvis = magicPoserJoints.find(b => /pelvis|hips/i.test(b.name))
+      if (pelvis) {
+        gltf.scene.updateMatrixWorld(true)
+        const pelvisPos = new THREE.Vector3()
+        pelvis.getWorldPosition(pelvisPos)
+        setWaistOffset(pelvisPos)
+      } else {
+        const bbox = new THREE.Box3().setFromObject(gltf.scene)
+        const height = bbox.max.y - bbox.min.y
+        const waist = new THREE.Vector3(0, bbox.min.y + height * 0.5, 0)
+        setWaistOffset(waist)
+      }
 
       // モデル位置設定はJSX側で行うため、ここではオフセットのみ更新
 
