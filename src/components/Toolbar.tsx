@@ -1,7 +1,6 @@
 'use client'
 
 import React from 'react'
-import { useRouter } from 'next/navigation'
 
 export type OperationMode = 'view' | 'transform' | 'pose'
 
@@ -18,7 +17,6 @@ export default function Toolbar({
   onResetPose,
   onPresetPose
 }: ToolbarProps) {
-  const router = useRouter()
   const modeConfig = {
     view: {
       icon: '👁️',
@@ -38,16 +36,10 @@ export default function Toolbar({
   }
 
   return (
-    <div className="absolute top-4 left-4 bg-black bg-opacity-80 text-white rounded-lg shadow-lg">
+    <div className="absolute top-4 left-4 bg-black bg-opacity-80 text-white rounded-lg shadow-lg max-w-xs">
       {/* ヘッダー */}
-      <div className="px-4 py-3 border-b border-gray-600 flex items-center justify-between">
-        <h2 className="text-lg font-bold">ボルダリングポーズ検討</h2>
-        <button
-          onClick={() => router.push('/')}
-          className="px-2 py-1 text-sm bg-blue-600 rounded hover:bg-blue-500"
-        >
-          トップへ戻る
-        </button>
+      <div className="px-4 py-3 border-b border-gray-600">
+        <h2 className="text-lg font-bold">ルートプランナー</h2>
       </div>
 
       {/* モード切り替えボタン */}
@@ -93,6 +85,38 @@ export default function Toolbar({
             </div>
           </div>
         )}
+
+        {/* 操作ガイド */}
+        <div className="mt-3 pt-3 border-t border-gray-600">
+          <div className="font-bold text-sm mb-1">{modeConfig[currentMode].label} ガイド</div>
+          {currentMode === 'view' && (
+            <div className="text-xs space-y-0.5">
+              <div>• マウス左ドラッグ：視点回転</div>
+              <div>• マウス右ドラッグ：視点移動</div>
+              <div>• ホイール：ズーム</div>
+            </div>
+          )}
+          {currentMode === 'transform' && (
+            <div className="text-xs space-y-0.5">
+              <div>• ドラッグ：モデル操作</div>
+              <div>• R/T/Sキー：モード切替</div>
+              <div className="text-gray-300">3D操作可能:</div>
+              <div className="text-yellow-200">• T: 移動 / R: 回転 / S: スケール</div>
+              <div className="text-green-200">• ESC: 選択解除</div>
+            </div>
+          )}
+          {currentMode === 'pose' && (
+            <div className="text-xs space-y-0.5">
+              <div>• 関節をドラッグ：ポーズ変更</div>
+              <div>• 右クリック：関節リセット</div>
+              <div>• プリセット：基本ポーズ適用</div>
+              <div className="text-gray-300">ポーズ編集 (デバッグ強化版):</div>
+              <div className="text-cyan-200">• 青球: 全関節共通色</div>
+              <div className="text-yellow-200">• ドラッグで関節移動・連動動作</div>
+              <div className="text-orange-200">🔍 コンソールでドラッグ詳細確認可能</div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
