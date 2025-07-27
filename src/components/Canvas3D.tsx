@@ -171,29 +171,7 @@ function selectMagicPoserJoints(allBones: THREE.Bone[]): THREE.Bone[] {
 
 // 関節の重要度情報取得
 function getJointInfo(boneName: string) {
-  const name = boneName.toLowerCase()
-
-  // 重要関節（赤色・大きめ）
-  if (name.includes('head') || name.includes('hand') || name.includes('foot')) {
-    return {
-      type: 'important',
-      size: 0.15,
-      color: '#ff6b6b',
-      label: boneName
-    }
-  }
-
-  // 脚関節（緑色・中サイズ）
-  if (name.includes('leg') || name.includes('hip')) {
-    return {
-      type: 'leg',
-      size: 0.12,
-      color: '#4CAF50',
-      label: boneName
-    }
-  }
-
-  // 一般関節（青色・標準）
+  // すべての関節は同一扱い（色・サイズ統一）
   return {
     type: 'normal',
     size: 0.1,
@@ -400,8 +378,7 @@ function JointControl({
   // 関節情報に基づくサイズと色
   const sphereSize = jointInfo.size
   const baseColor = jointInfo.color
-  const hoverColor = jointInfo.type === 'important' ? '#ff9999' :
-                     jointInfo.type === 'leg' ? '#66BB6A' : '#6fe6dd'
+  const hoverColor = '#6fe6dd'
   const dragColor = '#ffff00'
 
   return (
@@ -953,9 +930,7 @@ export default function Canvas3D({
             <div>• 右クリック：関節リセット</div>
             <div>• プリセット：基本ポーズ適用</div>
             <div className="text-gray-300">ポーズ編集 (デバッグ強化版):</div>
-            <div className="text-red-200">• 赤球: 重要関節（手・足・頭）</div>
-            <div className="text-green-200">• 緑球: 脚関節（太もも・すね）</div>
-            <div className="text-cyan-200">• 青球: 一般関節（肩・腕・胴体）</div>
+            <div className="text-cyan-200">• 青球: 全関節共通色</div>
             <div className="text-yellow-200">• ドラッグで関節移動・連動動作</div>
             <div className="text-orange-200">🔍 コンソールでドラッグ詳細確認可能</div>
           </div>
