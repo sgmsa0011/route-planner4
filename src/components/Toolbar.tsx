@@ -77,7 +77,6 @@ export default function Toolbar({
         {currentMode === 'transform' && (
           <div className="mt-3 pt-3 border-t border-gray-600">
             <div className="text-xs text-gray-400">
-              <div className="mb-1">キーボードショートカット:</div>
               <div>• R：回転モード</div>
               <div>• T：移動モード</div>
               <div>• S：スケールモード</div>
