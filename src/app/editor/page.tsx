@@ -62,7 +62,12 @@ export default function EditorPage() {
     const idx = list.findIndex(c => c.id === course.id)
     if (idx >= 0) list[idx] = course
     else list.push(course)
-    localStorage.setItem('climbing-courses', JSON.stringify(list))
+    try {
+      localStorage.setItem('climbing-courses', JSON.stringify(list))
+    } catch (e) {
+      console.error(e)
+      alert('データ保存に失敗しました。画像が大きすぎる可能性があります。')
+    }
   }, [course])
 
   const handleStepSave = useCallback((step: Step) => {
