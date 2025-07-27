@@ -97,16 +97,29 @@ export default function Home() {
   return (
     <div className="p-8 space-y-6 text-white bg-gray-900 min-h-screen">
       <h1 className="text-2xl font-bold">ボルダリングコース管理</h1>
-      <div className="p-4 bg-gray-800 rounded space-y-2">
+      <div className="p-4 bg-gray-800 rounded space-y-3">
         <h2 className="font-semibold">新規コース作成</h2>
         <input
           type="text"
           placeholder="コース名"
           value={name}
           onChange={e => setName(e.target.value)}
-          className="px-2 py-1 text-black w-full rounded"
+          className="px-2 py-1 text-black bg-white w-full rounded"
         />
-        <input type="file" accept="image/*" onChange={e => setBgFile(e.target.files?.[0] || null)} />
+        <div className="flex items-center space-x-2">
+          <label className="px-3 py-1 bg-gray-700 text-white rounded cursor-pointer">
+            コース画像を選択
+            <input
+              type="file"
+              accept="image/*"
+              onChange={e => setBgFile(e.target.files?.[0] || null)}
+              className="hidden"
+            />
+          </label>
+          <span className="text-sm text-gray-300">
+            {bgFile?.name || 'wall.jpg(サンプル)'}
+          </span>
+        </div>
         <button onClick={handleCreate} className="px-4 py-2 bg-blue-600 rounded text-white mt-2">作成</button>
       </div>
       <div className="p-4 bg-gray-800 rounded">
