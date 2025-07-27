@@ -31,7 +31,7 @@ export default function Toolbar({
     pose: {
       icon: '🤸',
       label: 'ポーズ編集',
-      description: '• 関節をドラッグ：ポーズ変更\n• 右クリック：関節リセット\n• プリセット：基本ポーズ適用'
+      description: '• 関節をドラッグ：ポーズ変更\n• 右クリック：関節リセット'
     }
   }
 
@@ -44,7 +44,7 @@ export default function Toolbar({
 
       {/* モード切り替えボタン */}
       <div className="p-3">
-        <div className="flex gap-1 mb-3">
+        <div className="flex flex-col gap-1 mb-3">
           {(Object.keys(modeConfig) as OperationMode[]).map((mode) => (
             <button
               key={mode}
@@ -64,32 +64,6 @@ export default function Toolbar({
         {/* ポーズモード時の追加コントロール */}
         {currentMode === 'pose' && (
           <div className="mt-3 pt-3 border-t border-gray-600">
-            <div className="mb-2">
-              <label className="block text-xs font-medium mb-1 text-gray-300">
-                プリセットポーズ
-              </label>
-              <div className="grid grid-cols-3 gap-1">
-                <button
-                  onClick={() => onPresetPose?.('tpose')}
-                  className="px-2 py-1 text-xs bg-green-700 rounded hover:bg-green-600 transition-colors"
-                >
-                  Tポーズ
-                </button>
-                <button
-                  onClick={() => onPresetPose?.('relax')}
-                  className="px-2 py-1 text-xs bg-green-700 rounded hover:bg-green-600 transition-colors"
-                >
-                  リラックス
-                </button>
-                <button
-                  onClick={() => onPresetPose?.('sit')}
-                  className="px-2 py-1 text-xs bg-green-700 rounded hover:bg-green-600 transition-colors"
-                >
-                  座り
-                </button>
-              </div>
-            </div>
-
             <button
               onClick={onResetPose}
               className="w-full px-3 py-1 text-xs bg-red-700 rounded hover:bg-red-600 transition-colors"
