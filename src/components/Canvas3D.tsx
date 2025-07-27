@@ -529,6 +529,7 @@ function HumanModel({
   const [bones, setBones] = useState<THREE.Bone[]>([])
   const [headBone, setHeadBone] = useState<THREE.Bone | null>(null)
   const [originalPose, setOriginalPose] = useState<Record<string, BoneData> | null>(null)
+  const [modelCenter, setModelCenter] = useState(new THREE.Vector3())
   const [modelTransform, setModelTransform] = useState({
     position: new THREE.Vector3(0, -1, 0),
     // 初期向きを後ろ向き(180度回転)にし、大きさを1.5倍に設定
@@ -578,10 +579,10 @@ function HumanModel({
       setHeadBone(head)
       setOriginalPose(originalBoneData)
 
-      // モデル位置設定
-      modelRef.current.position.copy(modelTransform.position)
-      modelRef.current.scale.copy(modelTransform.scale)
-      modelRef.current.rotation.copy(modelTransform.rotation)
+      // モデル中央を取得しTransformControlsの基点にする
+      const box = new THREE.Box3().setFromObject(gltf.scene)
+      const center = box.getCenter(new THREE.Vector3())
+      setModelCenter(center)
 
       console.log('🎯 拡張ポーズ編集モデル読み込み完了:', magicPoserJoints.length, '個の主要関節')
 
@@ -589,7 +590,15 @@ function HumanModel({
         setIsModelReady(true)
       }, 200)
     }
-  }, [gltf.scene, modelTransform])
+  }, [gltf.scene])
+
+  useEffect(() => {
+    if (modelRef.current) {
+      modelRef.current.position.copy(modelTransform.position.clone().add(modelCenter))
+      modelRef.current.scale.copy(modelTransform.scale)
+      modelRef.current.rotation.copy(modelTransform.rotation)
+    }
+  }, [modelTransform, modelCenter])
 
   // プリセットポーズ適用
   useEffect(() => {
@@ -687,6 +696,7 @@ function HumanModel({
     if (loadPoseData && modelRef.current) {
       // モデルの位置・回転・スケールを適用
       modelRef.current.position.fromArray(loadPoseData.model.position)
+      modelRef.current.position.add(modelCenter)
       modelRef.current.rotation.fromArray(loadPoseData.model.rotation as [number, number, number])
       modelRef.current.scale.fromArray(loadPoseData.model.scale)
 
@@ -733,7 +743,9 @@ function HumanModel({
   const extractCurrentPose = useCallback((): CanvasPoseData => {
     const poseData: CanvasPoseData = {
       model: {
-        position: modelRef.current?.position.toArray() as [number, number, number] || [0, -1, 0],
+        position: modelRef.current
+          ? modelRef.current.position.clone().sub(modelCenter).toArray() as [number, number, number]
+          : [0, -1, 0],
         rotation: modelRef.current?.rotation.toArray().slice(0, 3) as [number, number, number] || [0, 0, 0],
         scale: modelRef.current?.scale.toArray() as [number, number, number] || [1, 1, 1]
       },
@@ -764,13 +776,18 @@ function HumanModel({
       />
 
       {/* 3Dモデル */}
-      <primitive
+      <group
         ref={modelRef}
-        object={gltf.scene}
-        position={modelTransform.position}
+        position={[
+          modelTransform.position.x + modelCenter.x,
+          modelTransform.position.y + modelCenter.y,
+          modelTransform.position.z + modelCenter.z
+        ]}
         rotation={modelTransform.rotation}
         scale={modelTransform.scale}
-      />
+      >
+        <primitive object={gltf.scene} position={[-modelCenter.x, -modelCenter.y, -modelCenter.z]} />
+      </group>
 
       {/* 頭部クリック検出 */}
       {headBone && (
@@ -801,7 +818,7 @@ function HumanModel({
 
               // モデル変形を記録
               setModelTransform({
-                position: modelRef.current.position.clone(),
+                position: modelRef.current.position.clone().sub(modelCenter),
                 rotation: modelRef.current.rotation.clone(),
                 scale: modelRef.current.scale.clone()
               })
