@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useRouter } from 'next/navigation'
 
 export type OperationMode = 'view' | 'transform' | 'pose'
 
@@ -17,6 +18,7 @@ export default function Toolbar({
   onResetPose,
   onPresetPose
 }: ToolbarProps) {
+  const router = useRouter()
   const modeConfig = {
     view: {
       icon: '👁️',
@@ -38,8 +40,14 @@ export default function Toolbar({
   return (
     <div className="absolute top-4 left-4 bg-black bg-opacity-80 text-white rounded-lg shadow-lg">
       {/* ヘッダー */}
-      <div className="px-4 py-3 border-b border-gray-600">
+      <div className="px-4 py-3 border-b border-gray-600 flex items-center justify-between">
         <h2 className="text-lg font-bold">ボルダリングポーズ検討</h2>
+        <button
+          onClick={() => router.push('/')}
+          className="px-2 py-1 text-sm bg-blue-600 rounded hover:bg-blue-500"
+        >
+          トップへ戻る
+        </button>
       </div>
 
       {/* モード切り替えボタン */}
