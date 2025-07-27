@@ -1,232 +1,99 @@
 'use client'
-
-import React, { useState, useEffect } from 'react'
-import dynamic from 'next/dynamic'
-import Controls from '@/components/Controls'
-import Toolbar, { OperationMode } from '@/components/Toolbar'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import type { CanvasPoseData } from '@/components/Canvas3D'
 
-// Canvas3Dコンポーネントを動的インポート（SSR回避）
-const Canvas3D = dynamic(() => import('@/components/Canvas3D'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-screen bg-gray-900 flex items-center justify-center">
-      <div className="text-white text-xl">3Dシーンを読み込み中...</div>
-    </div>
-  )
-})
-
-interface Pose {
+interface Step {
   id: string
   name: string
   data: CanvasPoseData
   timestamp: number
 }
-
-interface FileStatus {
-  model: boolean
-  background: boolean
+interface Course {
+  id: string
+  name: string
+  background: string
+  steps: Step[]
 }
 
 export default function Home() {
-  const [poses, setPoses] = useState<Pose[]>([])
-  const [currentPose, setCurrentPose] = useState<Pose | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [fileStatus, setFileStatus] = useState<FileStatus>({ model: false, background: false })
+  const router = useRouter()
+  const [courses, setCourses] = useState<Course[]>([])
+  const [name, setName] = useState('')
+  const [bgFile, setBgFile] = useState<File | null>(null)
 
-  // 新しい状態管理
-  const [operationMode, setOperationMode] = useState<OperationMode>('view')
-  const [resetTrigger, setResetTrigger] = useState(0)
-  const [presetPose, setPresetPose] = useState<string | null>(null)
-  const [currentPoseData, setCurrentPoseData] = useState<CanvasPoseData | null>(null)
-  const [poseToLoad, setPoseToLoad] = useState<CanvasPoseData | null>(null)
-
-  // ファイルの存在確認
   useEffect(() => {
-    const checkFiles = async () => {
+    const saved = localStorage.getItem('climbing-courses')
+    if (saved) {
       try {
-        // モデルファイルの存在確認
-        const modelResponse = await fetch('/model.glb', { method: 'HEAD' })
-        const modelExists = modelResponse.ok
-
-        // 背景画像の存在確認
-        const backgroundResponse = await fetch('/wall.jpg', { method: 'HEAD' })
-        const backgroundExists = backgroundResponse.ok
-
-        setFileStatus({
-          model: modelExists,
-          background: backgroundExists
-        })
-
-        console.log('ファイル存在確認:', {
-          'model.glb': modelExists,
-          'wall.jpg': backgroundExists
-        })
-      } catch (error) {
-        console.error('ファイル存在確認エラー:', error)
-        setFileStatus({ model: false, background: false })
-      }
-    }
-
-    checkFiles()
-  }, [])
-
-  // ローカルストレージからポーズデータを読み込み
-  useEffect(() => {
-    try {
-      const savedPoses = localStorage.getItem('climbing-poses')
-      if (savedPoses) {
-        const parsedPoses = JSON.parse(savedPoses)
-        setPoses(Array.isArray(parsedPoses) ? parsedPoses : [])
-      }
-    } catch (error) {
-      console.error('ポーズデータの読み込みに失敗しました:', error)
-    } finally {
-      setIsLoading(false)
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) setCourses(parsed)
+      } catch {}
     }
   }, [])
 
-  // ポーズデータをローカルストレージに保存
-  useEffect(() => {
-    if (!isLoading) {
-      try {
-        localStorage.setItem('climbing-poses', JSON.stringify(poses))
-      } catch (error) {
-        console.error('ポーズデータの保存に失敗しました:', error)
-      }
+  const saveCourses = (list: Course[]) => {
+    setCourses(list)
+    localStorage.setItem('climbing-courses', JSON.stringify(list))
+  }
+
+  const handleCreate = async () => {
+    if (!name.trim()) return alert('コース名を入力してください')
+    let bg = ''
+    if (bgFile) {
+      bg = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = e => resolve(e.target?.result as string)
+        reader.readAsDataURL(bgFile)
+      })
     }
-  }, [poses, isLoading])
-
-  const handlePoseSave = (pose: Pose) => {
-    if (currentPoseData) {
-      pose = { ...pose, data: currentPoseData }
-    }
-    setPoses(prev => {
-      const existingIndex = prev.findIndex(p => p.id === pose.id)
-      if (existingIndex >= 0) {
-        // 既存のポーズを更新
-        const updated = [...prev]
-        updated[existingIndex] = pose
-        return updated
-      } else {
-        // 新しいポーズを追加
-        return [...prev, pose]
-      }
-    })
-
-    console.log('ポーズを保存しました:', pose)
+    const id = `course_${Date.now()}`
+    const newCourse: Course = { id, name: name.trim(), background: bg, steps: [] }
+    const updated = [...courses, newCourse]
+    saveCourses(updated)
+    router.push(`/editor?id=${id}`)
   }
 
-  const handlePoseLoad = (pose: Pose) => {
-    setCurrentPose(pose)
-    setPoseToLoad({ ...pose.data })
-    console.log('ポーズを読み込みました:', pose)
+  const handleOpen = (id: string) => {
+    router.push(`/editor?id=${id}`)
   }
 
-  const handlePoseDelete = (poseId: string) => {
-    setPoses(prev => prev.filter(p => p.id !== poseId))
-
-    if (currentPose?.id === poseId) {
-      setCurrentPose(null)
-    }
-
-    console.log('ポーズを削除しました:', poseId)
+  const handleDelete = (id: string) => {
+    if (!confirm('このコースを削除しますか？')) return
+    const updated = courses.filter(c => c.id !== id)
+    saveCourses(updated)
   }
-
-  // 操作モード変更
-  const handleModeChange = (mode: OperationMode) => {
-    setOperationMode(mode)
-    console.log('操作モードを変更:', mode)
-  }
-
-  // ポーズリセット
-  const handleResetPose = () => {
-    setResetTrigger(prev => prev + 1)
-    setCurrentPose(null)
-    console.log('ポーズをリセット')
-  }
-
-  // プリセットポーズ適用
-  const handlePresetPose = (poseType: 'tpose' | 'relax' | 'sit') => {
-    setPresetPose(poseType)
-    console.log('プリセットポーズを適用:', poseType)
-
-    // プリセットポーズをクリア（一度だけ適用）
-    setTimeout(() => setPresetPose(null), 100)
-  }
-
-  // ポーズ変更時のハンドラ
-  const handlePoseChange = (poseData: CanvasPoseData) => {
-    setCurrentPoseData(poseData)
-  }
-
-  if (isLoading) {
-    return (
-      <div className="w-full h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">アプリケーションを読み込み中...</div>
-      </div>
-    )
-  }
-
-  // 不足しているファイルをリストアップ
-  const missingFiles = []
-  if (!fileStatus.model) missingFiles.push('model.glb')
-  if (!fileStatus.background) missingFiles.push('wall.jpg')
 
   return (
-    <main className="relative w-full h-screen overflow-hidden">
-      {/* 3Dキャンバス */}
-      <Canvas3D
-        modelUrl="/model.glb"
-        backgroundImageUrl="/wall.jpg"
-        operationMode={operationMode}
-        onPoseChange={handlePoseChange}
-        resetTrigger={resetTrigger}
-        presetPose={presetPose}
-        loadPoseData={poseToLoad}
-      />
-
-      {/* ツールバー（左上） */}
-      <Toolbar
-        currentMode={operationMode}
-        onModeChange={handleModeChange}
-        onResetPose={handleResetPose}
-        onPresetPose={handlePresetPose}
-      />
-
-      {/* コントロールパネル（右上） */}
-      <Controls
-        poses={poses}
-        onPoseSave={handlePoseSave}
-        onPoseLoad={handlePoseLoad}
-        onPoseDelete={handlePoseDelete}
-      />
-
-      {/* デバッグ情報（開発時のみ表示） */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="absolute bottom-4 left-4 bg-black bg-opacity-80 text-white p-2 rounded text-xs">
-          <div>現在のポーズ: {currentPose?.name || 'なし'}</div>
-          <div>保存済みポーズ数: {poses.length}</div>
-          <div>操作モード: {operationMode}</div>
-          <div>環境: {process.env.NODE_ENV}</div>
-          <div>モデルファイル: {fileStatus.model ? '✅' : '❌'}</div>
-          <div>背景画像: {fileStatus.background ? '✅' : '❌'}</div>
-        </div>
-      )}
-
-      {/* ファイル不足警告（実際にファイルが存在しない場合のみ表示） */}
-      {missingFiles.length > 0 && (
-        <div className="absolute bottom-4 right-4 text-white text-xs bg-red-900 bg-opacity-90 p-3 rounded shadow-lg">
-          <div className="font-bold mb-1">⚠️ 必要なファイルが見つかりません</div>
-          <div className="text-xs text-red-200">publicフォルダに以下のファイルを配置してください：</div>
-          <ul className="mt-1 text-xs">
-            {missingFiles.map(file => (
-              <li key={file} className="ml-2">• {file}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-    </main>
+    <div className="p-8 space-y-6 text-white bg-gray-900 min-h-screen">
+      <h1 className="text-2xl font-bold">ボルダリングコース管理</h1>
+      <div className="p-4 bg-gray-800 rounded space-y-2">
+        <h2 className="font-semibold">新規コース作成</h2>
+        <input
+          type="text"
+          placeholder="コース名"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          className="px-2 py-1 text-black w-full rounded"
+        />
+        <input type="file" accept="image/*" onChange={e => setBgFile(e.target.files?.[0] || null)} />
+        <button onClick={handleCreate} className="px-4 py-2 bg-blue-600 rounded text-white mt-2">作成</button>
+      </div>
+      <div className="p-4 bg-gray-800 rounded">
+        <h2 className="font-semibold mb-2">既存コース</h2>
+        {courses.length === 0 && <p>保存されたコースはありません</p>}
+        <ul className="space-y-2">
+          {courses.map(c => (
+            <li key={c.id} className="flex justify-between items-center bg-gray-700 p-2 rounded">
+              <span>{c.name}</span>
+              <div className="space-x-2">
+                <button onClick={() => handleOpen(c.id)} className="px-2 py-1 bg-green-600 rounded text-sm">開く</button>
+                <button onClick={() => handleDelete(c.id)} className="px-2 py-1 bg-red-600 rounded text-sm">削除</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   )
 }
