@@ -709,24 +709,45 @@ function HumanModel({
 
     // 🔍 デバッグ強化：マウス移動とポーズ変更の詳細確認
   const handleJointDrag = useCallback(
-    (bone: THREE.Bone, screenDelta: { x: number; y: number }, camera: THREE.Camera) => {
+    (
+      bone: THREE.Bone,
+      screenDelta: { x: number; y: number },
+      camera: THREE.Camera
+    ) => {
       const SENSITIVITY = 0.02
 
       const upAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion)
       const rightAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)
 
-      bone.rotateOnWorldAxis(upAxis, screenDelta.x * SENSITIVITY)
-      bone.rotateOnWorldAxis(rightAxis, -screenDelta.y * SENSITIVITY)
+      const applyRotation = (target: THREE.Bone, ratio: number) => {
+        target.rotateOnWorldAxis(upAxis, screenDelta.x * SENSITIVITY * ratio)
+        target.rotateOnWorldAxis(rightAxis, -screenDelta.y * SENSITIVITY * ratio)
+        target.updateMatrix()
+        target.updateMatrixWorld(true)
+      }
 
-      bone.updateMatrix()
-      bone.updateMatrixWorld(true)
+      // まず対象の関節を回転
+      applyRotation(bone, 1)
+
+      // 手首や足首の場合は親関節も連動させる
+      if (/hand/i.test(bone.name) || /foot/i.test(bone.name)) {
+        let parent = bone.parent
+        let depth = 0
+        while (parent && depth < 2) {
+          if (parent instanceof THREE.Bone) {
+            applyRotation(parent, 0.5)
+            depth++
+          }
+          parent = parent.parent
+        }
+      }
 
       if (onPoseChange) {
         const poseData = extractCurrentPose()
         onPoseChange(poseData)
       }
     },
-    [onPoseChange]
+    [onPoseChange, extractCurrentPose]
   )
 
   // 現在のポーズ抽出
