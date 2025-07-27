@@ -708,6 +708,48 @@ function HumanModel({
   }, [loadPoseData])
 
     // 🔍 デバッグ強化：マウス移動とポーズ変更の詳細確認
+  // 現在のポーズ抽出
+  const extractCurrentPose = useCallback((): CanvasPoseData => {
+    const poseData: CanvasPoseData = {
+      model: {
+        position:
+          (modelRef.current?.position.toArray() as [number, number, number]) || [
+            0,
+            -1,
+            0
+          ],
+        rotation:
+          (modelRef.current?.rotation
+            .toArray()
+            .slice(0, 3) as [number, number, number]) || [0, 0, 0],
+        scale:
+          (modelRef.current?.scale.toArray() as [number, number, number]) || [
+            1,
+            1,
+            1
+          ]
+      },
+      bones: {}
+    }
+
+    bones.forEach((bone) => {
+      poseData.bones[bone.name] = {
+        position: bone.position.toArray() as [number, number, number],
+        rotation: bone.rotation
+          .toArray()
+          .slice(0, 3) as [number, number, number],
+        quaternion: bone.quaternion.toArray() as [
+          number,
+          number,
+          number,
+          number
+        ]
+      }
+    })
+
+    return poseData
+  }, [bones])
+
   const handleJointDrag = useCallback(
     (
       bone: THREE.Bone,
@@ -750,27 +792,6 @@ function HumanModel({
     [onPoseChange, extractCurrentPose]
   )
 
-  // 現在のポーズ抽出
-  const extractCurrentPose = useCallback((): CanvasPoseData => {
-    const poseData: CanvasPoseData = {
-      model: {
-        position: modelRef.current?.position.toArray() as [number, number, number] || [0, -1, 0],
-        rotation: modelRef.current?.rotation.toArray().slice(0, 3) as [number, number, number] || [0, 0, 0],
-        scale: modelRef.current?.scale.toArray() as [number, number, number] || [1, 1, 1]
-      },
-      bones: {}
-    }
-
-    bones.forEach((bone) => {
-      poseData.bones[bone.name] = {
-        position: bone.position.toArray() as [number, number, number],
-        rotation: bone.rotation.toArray().slice(0, 3) as [number, number, number],
-        quaternion: bone.quaternion.toArray() as [number, number, number, number]
-      }
-    })
-
-    return poseData
-  }, [bones])
 
   if (!gltf || !gltf.scene) {
     return null // 水色立方体を削除
