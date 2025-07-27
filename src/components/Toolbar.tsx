@@ -61,16 +61,6 @@ export default function Toolbar({
           ))}
         </div>
 
-        {/* 現在のモードの操作説明 */}
-        <div className="bg-gray-900 bg-opacity-50 p-3 rounded text-xs">
-          <div className="font-medium mb-1 text-blue-300">
-            {modeConfig[currentMode].icon} {modeConfig[currentMode].label}
-          </div>
-          <div className="text-gray-300 whitespace-pre-line leading-relaxed">
-            {modeConfig[currentMode].description}
-          </div>
-        </div>
-
         {/* ポーズモード時の追加コントロール */}
         {currentMode === 'pose' && (
           <div className="mt-3 pt-3 border-t border-gray-600">

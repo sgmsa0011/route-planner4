@@ -6,6 +6,12 @@ import { OrbitControls, Environment, Grid, useGLTF, useTexture, TransformControl
 import * as THREE from 'three'
 import { OperationMode } from './Toolbar'
 
+const modeLabel: Record<OperationMode, string> = {
+  view: '視点操作',
+  transform: 'モデル操作',
+  pose: 'ポーズ編集'
+}
+
 export interface CanvasPoseData {
   model: {
     position: [number, number, number]
@@ -922,27 +928,38 @@ export default function Canvas3D({
         </div>
       )}
 
-      {/* 現在のモード表示 */}
-      <div className="absolute bottom-4 right-4 bg-black bg-opacity-70 text-white p-2 rounded text-sm">
-        現在のモード: {operationMode}
-        {operationMode === 'view' && <div className="text-xs text-gray-300">マウスで視点操作可能</div>}
+      {/* 操作ガイド */}
+      <div className="absolute bottom-4 right-4 bg-black bg-opacity-70 text-white p-3 rounded text-sm space-y-1">
+        <div className="font-bold">{modeLabel[operationMode]} ガイド</div>
+        {operationMode === 'view' && (
+          <div className="text-xs space-y-0.5">
+            <div>• マウス左ドラッグ：視点回転</div>
+            <div>• マウス右ドラッグ：視点移動</div>
+            <div>• ホイール：ズーム</div>
+          </div>
+        )}
         {operationMode === 'transform' && (
-          <div className="text-xs space-y-1">
+          <div className="text-xs space-y-0.5">
+            <div>• ドラッグ：モデル操作</div>
+            <div>• R/T/Sキー：モード切替</div>
             <div className="text-gray-300">3D操作可能:</div>
             <div className="text-yellow-200">• T: 移動 / R: 回転 / S: スケール</div>
             <div className="text-green-200">• ESC: 選択解除</div>
           </div>
         )}
-                 {operationMode === 'pose' && (
-           <div className="text-xs space-y-1">
-             <div className="text-gray-300">ポーズ編集 (デバッグ強化版):</div>
-             <div className="text-red-200">• 赤球: 重要関節（手・足・頭）</div>
-             <div className="text-green-200">• 緑球: 脚関節（太もも・すね）</div>
-             <div className="text-cyan-200">• 青球: 一般関節（肩・腕・胴体）</div>
-             <div className="text-yellow-200">• ドラッグで関節移動・連動動作</div>
-             <div className="text-orange-200">🔍 コンソールでドラッグ詳細確認可能</div>
-           </div>
-         )}
+        {operationMode === 'pose' && (
+          <div className="text-xs space-y-0.5">
+            <div>• 関節をドラッグ：ポーズ変更</div>
+            <div>• 右クリック：関節リセット</div>
+            <div>• プリセット：基本ポーズ適用</div>
+            <div className="text-gray-300">ポーズ編集 (デバッグ強化版):</div>
+            <div className="text-red-200">• 赤球: 重要関節（手・足・頭）</div>
+            <div className="text-green-200">• 緑球: 脚関節（太もも・すね）</div>
+            <div className="text-cyan-200">• 青球: 一般関節（肩・腕・胴体）</div>
+            <div className="text-yellow-200">• ドラッグで関節移動・連動動作</div>
+            <div className="text-orange-200">🔍 コンソールでドラッグ詳細確認可能</div>
+          </div>
+        )}
       </div>
     </div>
   )
