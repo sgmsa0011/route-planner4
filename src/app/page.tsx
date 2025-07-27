@@ -3,6 +3,30 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CanvasPoseData } from '@/components/Canvas3D'
 
+// 画像をリサイズしてデータURLを返すユーティリティ
+const resizeImage = (file: File, maxW = 1024, maxH = 1024): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(maxW / img.width, maxH / img.height, 1)
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width * scale
+      canvas.height = img.height * scale
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return reject(new Error('canvas error'))
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL('image/jpeg', 0.7))
+    }
+    img.onerror = err => reject(err)
+    const reader = new FileReader()
+    reader.onload = e => {
+      img.src = e.target?.result as string
+    }
+    reader.onerror = err => reject(err)
+    reader.readAsDataURL(file)
+  })
+}
+
 interface Step {
   id: string
   name: string
@@ -34,18 +58,24 @@ export default function Home() {
 
   const saveCourses = (list: Course[]) => {
     setCourses(list)
-    localStorage.setItem('climbing-courses', JSON.stringify(list))
+    try {
+      localStorage.setItem('climbing-courses', JSON.stringify(list))
+    } catch (e) {
+      console.error(e)
+      alert('データ保存に失敗しました。画像が大きすぎる可能性があります。')
+    }
   }
 
   const handleCreate = async () => {
     if (!name.trim()) return alert('コース名を入力してください')
     let bg = ''
     if (bgFile) {
-      bg = await new Promise<string>((resolve) => {
-        const reader = new FileReader()
-        reader.onload = e => resolve(e.target?.result as string)
-        reader.readAsDataURL(bgFile)
-      })
+      try {
+        bg = await resizeImage(bgFile)
+      } catch (e) {
+        console.error(e)
+        alert('画像の読み込みに失敗しました')
+      }
     }
     const id = `course_${Date.now()}`
     const newCourse: Course = { id, name: name.trim(), background: bg, steps: [] }
