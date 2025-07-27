@@ -36,6 +36,7 @@ interface SceneProps {
   backgroundImageUrl?: string
   operationMode: OperationMode
   onPoseChange?: (poseData: CanvasPoseData) => void
+  onModeChange?: (mode: OperationMode) => void
   resetTrigger?: number
   presetPose?: string | null
   loadPoseData?: CanvasPoseData | null
@@ -461,11 +462,55 @@ function KeyboardHandler({
   return null
 }
 
+// 頭部クリック検出用コンポーネント
+function HeadClickTarget({
+  bone,
+  onSingle,
+  onDouble
+}: {
+  bone: THREE.Bone | null
+  onSingle: () => void
+  onDouble: () => void
+}) {
+  const meshRef = useRef<THREE.Mesh>(null)
+  const clickTimer = useRef<NodeJS.Timeout | null>(null)
+
+  useFrame(() => {
+    if (meshRef.current && bone) {
+      bone.getWorldPosition(meshRef.current.position)
+    }
+  })
+
+  const handleClick = useCallback(() => {
+    if (clickTimer.current) return
+    clickTimer.current = setTimeout(() => {
+      onSingle()
+      clickTimer.current = null
+    }, 250)
+  }, [onSingle])
+
+  const handleDoubleClick = useCallback(() => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
+    onDouble()
+  }, [onDouble])
+
+  return (
+    <mesh ref={meshRef} onClick={handleClick} onDoubleClick={handleDoubleClick}>
+      <sphereGeometry args={[0.25, 8, 8]} />
+      <meshBasicMaterial transparent opacity={0} />
+    </mesh>
+  )
+}
+
 // 人物モデルコンポーネント（拡張版）
 function HumanModel({
   modelUrl,
   operationMode,
   onPoseChange,
+  onModeChange,
   resetTrigger,
   presetPose,
   loadPoseData
@@ -473,6 +518,7 @@ function HumanModel({
   modelUrl?: string
   operationMode: OperationMode
   onPoseChange?: (poseData: CanvasPoseData) => void
+  onModeChange?: (mode: OperationMode) => void
   resetTrigger?: number
   presetPose?: string | null
   loadPoseData?: CanvasPoseData | null
@@ -481,6 +527,7 @@ function HumanModel({
   const [isModelReady, setIsModelReady] = useState(false)
   const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate')
   const [bones, setBones] = useState<THREE.Bone[]>([])
+  const [headBone, setHeadBone] = useState<THREE.Bone | null>(null)
   const [originalPose, setOriginalPose] = useState<Record<string, BoneData> | null>(null)
   const [modelTransform, setModelTransform] = useState({
     position: new THREE.Vector3(0, -1, 0),
@@ -527,6 +574,8 @@ function HumanModel({
       // Magic Poser準拠の19個関節のみを選択
       const magicPoserJoints = selectMagicPoserJoints(foundBones)
       setBones(magicPoserJoints)
+      const head = magicPoserJoints.find(b => /head|skull/i.test(b.name)) || null
+      setHeadBone(head)
       setOriginalPose(originalBoneData)
 
       // モデル位置設定
@@ -723,6 +772,15 @@ function HumanModel({
         scale={modelTransform.scale}
       />
 
+      {/* 頭部クリック検出 */}
+      {headBone && (
+        <HeadClickTarget
+          bone={headBone}
+          onSingle={() => onModeChange && onModeChange('pose')}
+          onDouble={() => onModeChange && onModeChange('transform')}
+        />
+      )}
+
       {/* TransformControls（拡張版） */}
       {operationMode === 'transform' && isModelReady && modelRef.current && (
         <TransformControls
@@ -796,6 +854,7 @@ function Scene({
   backgroundImageUrl,
   operationMode,
   onPoseChange,
+  onModeChange,
   resetTrigger,
   presetPose,
   loadPoseData
@@ -815,6 +874,7 @@ function Scene({
           modelUrl={modelUrl}
           operationMode={operationMode}
           onPoseChange={onPoseChange}
+          onModeChange={onModeChange}
           resetTrigger={resetTrigger}
           presetPose={presetPose}
           loadPoseData={loadPoseData}
@@ -842,6 +902,7 @@ export default function Canvas3D({
   backgroundImageUrl,
   operationMode = 'view',
   onPoseChange,
+  onModeChange,
   resetTrigger,
   presetPose,
   loadPoseData
@@ -879,12 +940,14 @@ export default function Canvas3D({
             isReady: true
           }))
         }}
+        onPointerMissed={() => onModeChange && onModeChange('view')}
       >
         <Scene
           modelUrl={modelUrl}
           backgroundImageUrl={backgroundImageUrl}
           operationMode={operationMode}
           onPoseChange={onPoseChange}
+          onModeChange={onModeChange}
           resetTrigger={resetTrigger}
           presetPose={presetPose}
           loadPoseData={loadPoseData}
