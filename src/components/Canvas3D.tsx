@@ -163,31 +163,31 @@ function selectMagicPoserJoints(allBones: THREE.Bone[]): THREE.Bone[] {
   return selectedJoints
 }
 
-// 関節の重要度情報取得
+// 関節の基本情報取得（色は統一）
 function getJointInfo(boneName: string) {
   const name = boneName.toLowerCase()
 
-  // 重要関節（赤色・大きめ）
+  // 重要関節（サイズ大）
   if (name.includes('head') || name.includes('hand') || name.includes('foot')) {
     return {
       type: 'important',
       size: 0.15,
-      color: '#ff6b6b',
+      color: '#4ecdc4',
       label: boneName
     }
   }
 
-  // 脚関節（緑色・中サイズ）
+  // 脚関節（中サイズ）
   if (name.includes('leg') || name.includes('hip')) {
     return {
       type: 'leg',
       size: 0.12,
-      color: '#4CAF50',
+      color: '#4ecdc4',
       label: boneName
     }
   }
 
-  // 一般関節（青色・標準）
+  // 一般関節（標準サイズ）
   return {
     type: 'normal',
     size: 0.1,
@@ -394,8 +394,7 @@ function JointControl({
   // 関節情報に基づくサイズと色
   const sphereSize = jointInfo.size
   const baseColor = jointInfo.color
-  const hoverColor = jointInfo.type === 'important' ? '#ff9999' :
-                     jointInfo.type === 'leg' ? '#66BB6A' : '#6fe6dd'
+  const hoverColor = '#6fe6dd'
   const dragColor = '#ffff00'
 
   return (
@@ -933,16 +932,13 @@ export default function Canvas3D({
             <div className="text-green-200">• ESC: 選択解除</div>
           </div>
         )}
-                 {operationMode === 'pose' && (
-           <div className="text-xs space-y-1">
-             <div className="text-gray-300">ポーズ編集 (デバッグ強化版):</div>
-             <div className="text-red-200">• 赤球: 重要関節（手・足・頭）</div>
-             <div className="text-green-200">• 緑球: 脚関節（太もも・すね）</div>
-             <div className="text-cyan-200">• 青球: 一般関節（肩・腕・胴体）</div>
-             <div className="text-yellow-200">• ドラッグで関節移動・連動動作</div>
-             <div className="text-orange-200">🔍 コンソールでドラッグ詳細確認可能</div>
-           </div>
-         )}
+        {operationMode === 'pose' && (
+          <div className="text-xs space-y-1">
+            <div className="text-gray-300">ポーズ編集モード:</div>
+            <div className="text-yellow-200">• ドラッグで関節移動</div>
+            <div className="text-orange-200">🔍 コンソールでドラッグ詳細確認可能</div>
+          </div>
+        )}
       </div>
     </div>
   )
