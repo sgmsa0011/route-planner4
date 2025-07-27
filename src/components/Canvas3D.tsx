@@ -465,15 +465,23 @@ function KeyboardHandler({
 // 頭部クリック検出用コンポーネント
 function HeadClickTarget({
   bone,
+  operationMode,
   onSingle,
   onDouble
 }: {
   bone: THREE.Bone | null
+  operationMode: OperationMode
   onSingle: () => void
   onDouble: () => void
 }) {
   const meshRef = useRef<THREE.Mesh>(null)
   const clickTimer = useRef<NodeJS.Timeout | null>(null)
+
+  const modeColors: Record<OperationMode, string> = {
+    view: '#888888',
+    transform: '#f87171',
+    pose: '#4ecdc4'
+  }
 
   useFrame(() => {
     if (meshRef.current && bone) {
@@ -500,7 +508,11 @@ function HeadClickTarget({
   return (
     <mesh ref={meshRef} onClick={handleClick} onDoubleClick={handleDoubleClick}>
       <sphereGeometry args={[0.25, 8, 8]} />
-      <meshBasicMaterial transparent opacity={0} />
+      <meshBasicMaterial
+        color={modeColors[operationMode]}
+        transparent
+        opacity={0.4}
+      />
     </mesh>
   )
 }
@@ -818,6 +830,7 @@ function HumanModel({
       {headBone && (
         <HeadClickTarget
           bone={headBone}
+          operationMode={operationMode}
           onSingle={() => onModeChange && onModeChange('pose')}
           onDouble={() => onModeChange && onModeChange('transform')}
         />
