@@ -787,28 +787,32 @@ function HumanModel({
 
       const upAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion)
       const rightAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)
+      const forwardAxis = new THREE.Vector3(0, 0, 1).applyQuaternion(camera.quaternion)
+
+      const isExtremity = /hand/i.test(bone.name) || /foot/i.test(bone.name)
 
       const applyRotation = (target: THREE.Bone, ratio: number) => {
-        target.rotateOnWorldAxis(upAxis, screenDelta.x * SENSITIVITY * ratio)
+        const axisX = isExtremity ? forwardAxis : upAxis
+        target.rotateOnWorldAxis(axisX, screenDelta.x * SENSITIVITY * ratio)
         target.rotateOnWorldAxis(rightAxis, -screenDelta.y * SENSITIVITY * ratio)
         target.updateMatrix()
         target.updateMatrixWorld(true)
       }
 
-      // まず対象の関節を回転
-      applyRotation(bone, 1)
-
-      // 手首や足首の場合は親関節も連動させる
-      if (/hand/i.test(bone.name) || /foot/i.test(bone.name)) {
+      if (isExtremity) {
+        // 手首・足首ノードでは自身の回転を行わず、親関節を回転させる
         let parent = bone.parent
         let depth = 0
         while (parent && depth < 2) {
           if (parent instanceof THREE.Bone) {
-            applyRotation(parent, 0.5)
+            applyRotation(parent, 1)
             depth++
           }
           parent = parent.parent
         }
+      } else {
+        // 通常の関節は自身を回転させる
+        applyRotation(bone, 1)
       }
 
       if (onPoseChange) {
