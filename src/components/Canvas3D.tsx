@@ -785,11 +785,11 @@ function HumanModel({
     ) => {
       const SENSITIVITY = 0.02
 
-      const upAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion)
+      const forwardAxis = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
       const rightAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)
 
       const applyRotation = (target: THREE.Bone, ratio: number) => {
-        target.rotateOnWorldAxis(upAxis, screenDelta.x * SENSITIVITY * ratio)
+        target.rotateOnWorldAxis(forwardAxis, screenDelta.x * SENSITIVITY * ratio)
         target.rotateOnWorldAxis(rightAxis, -screenDelta.y * SENSITIVITY * ratio)
         target.updateMatrix()
         target.updateMatrixWorld(true)
