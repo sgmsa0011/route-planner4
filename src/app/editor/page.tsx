@@ -114,6 +114,7 @@ export default function EditorPage() {
         modelUrl="/model.glb"
         backgroundImageUrl={course.background || '/wall.jpg'}
         operationMode={mode}
+        onModeChange={setMode}
         onPoseChange={handlePoseChange}
         resetTrigger={resetTrigger}
         presetPose={preset}
