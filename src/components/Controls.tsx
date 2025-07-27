@@ -16,6 +16,7 @@ interface ControlsProps {
   onPoseSave?: (pose: Pose) => void
   onPoseLoad?: (pose: Pose) => void
   onPoseDelete?: (poseId: string) => void
+  onPlay?: () => void
   poses?: Pose[]
 }
 
@@ -23,6 +24,7 @@ export default function Controls({
   onPoseSave,
   onPoseLoad,
   onPoseDelete,
+  onPlay,
   poses = []
 }: ControlsProps) {
   const [currentPoseName, setCurrentPoseName] = useState('')
@@ -31,7 +33,7 @@ export default function Controls({
 
   const handleSavePose = useCallback(() => {
     if (!currentPoseName.trim()) {
-      alert('ポーズ名を入力してください')
+      alert('ステップ名を入力してください')
       return
     }
 
@@ -48,17 +50,17 @@ export default function Controls({
 
     onPoseSave?.(newPose)
     setCurrentPoseName('')
-    alert(`ポーズ「${newPose.name}」を保存しました`)
+    alert(`ステップ「${newPose.name}」を保存しました`)
   }, [currentPoseName, onPoseSave])
 
   const handleLoadPose = useCallback((pose: Pose) => {
     onPoseLoad?.(pose)
     setSelectedPose(pose.id)
-    alert(`ポーズ「${pose.name}」を読み込みました`)
+    alert(`ステップ「${pose.name}」を読み込みました`)
   }, [onPoseLoad])
 
   const handleDeletePose = useCallback((poseId: string, poseName: string) => {
-    if (confirm(`ポーズ「${poseName}」を削除しますか？`)) {
+    if (confirm(`ステップ「${poseName}」を削除しますか？`)) {
       onPoseDelete?.(poseId)
       if (selectedPose === poseId) {
         setSelectedPose(null)
@@ -68,7 +70,7 @@ export default function Controls({
 
   const handleExportPoses = useCallback(() => {
     if (poses.length === 0) {
-      alert('エクスポートするポーズがありません')
+      alert('エクスポートするステップがありません')
       return
     }
 
@@ -95,7 +97,7 @@ export default function Controls({
         const importedPoses = JSON.parse(e.target?.result as string)
         if (Array.isArray(importedPoses)) {
           importedPoses.forEach(pose => onPoseSave?.(pose))
-          alert(`${importedPoses.length}個のポーズをインポートしました`)
+          alert(`${importedPoses.length}個のステップをインポートしました`)
         }
       } catch (error) {
         alert('ファイルの読み込みに失敗しました')
@@ -110,7 +112,7 @@ export default function Controls({
     <div className="absolute top-4 right-4 bg-black bg-opacity-80 text-white p-4 rounded-lg shadow-lg min-w-80">
       {/* ヘッダー */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold">ポーズコントロール</h3>
+        <h3 className="text-lg font-bold">ステップ管理</h3>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="text-xs bg-gray-700 px-2 py-1 rounded hover:bg-gray-600 transition-colors"
@@ -119,15 +121,15 @@ export default function Controls({
         </button>
       </div>
 
-      {/* ポーズ保存セクション */}
+      {/* ステップ保存セクション */}
       <div className="mb-4">
-        <label className="block text-sm font-medium mb-2">新しいポーズを保存</label>
+        <label className="block text-sm font-medium mb-2">新しいステップを保存</label>
         <div className="flex gap-2">
           <input
             type="text"
             value={currentPoseName}
             onChange={(e) => setCurrentPoseName(e.target.value)}
-            placeholder="ポーズ名を入力"
+            placeholder="ステップ名を入力"
             className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none"
             onKeyDown={(e) => e.key === 'Enter' && handleSavePose()}
           />
@@ -143,15 +145,15 @@ export default function Controls({
 
       {isExpanded && (
         <>
-          {/* 保存済みポーズリスト */}
+          {/* 保存済みステップリスト */}
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">
-              保存済みポーズ ({poses.length}個)
+              保存済みステップ ({poses.length}個)
             </label>
             <div className="max-h-40 overflow-y-auto space-y-2">
               {poses.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-4">
-                  保存されたポーズはありません
+                  保存されたステップはありません
                 </p>
               ) : (
                 poses.map((pose) => (
@@ -185,6 +187,14 @@ export default function Controls({
                 ))
               )}
             </div>
+            {poses.length > 0 && (
+              <button
+                onClick={onPlay}
+                className="mt-2 w-full px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+              >
+                再生
+              </button>
+            )}
           </div>
 
           {/* エクスポート/インポート */}
@@ -215,8 +225,8 @@ export default function Controls({
             <details className="text-xs text-gray-400">
               <summary className="cursor-pointer hover:text-white">デバッグ情報</summary>
               <div className="mt-2 p-2 bg-gray-900 rounded font-mono">
-                <div>選択中ポーズ: {selectedPose || 'なし'}</div>
-                <div>総ポーズ数: {poses.length}</div>
+                <div>選択中ステップ: {selectedPose || 'なし'}</div>
+                <div>総ステップ数: {poses.length}</div>
                 <div>展開状態: {isExpanded ? 'true' : 'false'}</div>
               </div>
             </details>
