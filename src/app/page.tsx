@@ -123,7 +123,7 @@ export default function Home() {
         <button onClick={handleCreate} className="px-4 py-2 bg-blue-600 rounded text-white mt-2">作成</button>
       </div>
       <div className="p-4 bg-gray-800 rounded">
-        <h2 className="font-semibold mb-2">既存コース</h2>
+        <h2 className="font-semibold mb-2">作成済コース</h2>
         {courses.length === 0 && <p>保存されたコースはありません</p>}
         <ul className="space-y-2">
           {courses.map(c => (
