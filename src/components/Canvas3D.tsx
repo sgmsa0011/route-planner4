@@ -654,56 +654,79 @@ function HumanModel({
     return poseData
   }, [bones])
 
-  const [draggedBone, setDraggedBone] = useState<THREE.Bone | null>(null)
+  const [draggedBone, setDraggedBone] = useState<{ bone: THREE.Bone; type: 'ik' | 'fk' } | null>(null)
+  const [lastMousePos, setLastMousePos] = useState<{ x: number, y: number } | null>(null)
   const { camera, raycaster, size } = useThree()
   const dragPlane = useRef(new THREE.Plane())
 
   const handleJointPointerDown = useCallback((bone: THREE.Bone, event: ThreeEvent<PointerEvent>) => {
     if (operationMode !== 'pose') return
-    // End effector (hand/foot) check
-    if (!/hand|foot/i.test(bone.name)) return
 
-    const chainName = Object.keys(ikChains).find(name =>
-      ikChains[name].some(b => b.uuid === bone.uuid)
-    )
+    // IK for end effectors
+    if (/hand|foot/i.test(bone.name)) {
+      const chainName = Object.keys(ikChains).find(name =>
+        ikChains[name].some(b => b.uuid === bone.uuid)
+      )
+      if (chainName && ikChains[chainName]) {
+        const chain = ikChains[chainName]
+        const targetPos = new THREE.Vector3()
+        chain[chain.length - 1].getWorldPosition(targetPos)
 
-    if (chainName && ikChains[chainName]) {
-      const chain = ikChains[chainName]
-      const targetPos = new THREE.Vector3()
-      chain[chain.length - 1].getWorldPosition(targetPos)
+        const cameraDirection = new THREE.Vector3()
+        camera.getWorldDirection(cameraDirection)
+        dragPlane.current.setFromNormalAndCoplanarPoint(cameraDirection.negate(), targetPos)
 
-      const cameraDirection = new THREE.Vector3()
-      camera.getWorldDirection(cameraDirection)
-      dragPlane.current.setFromNormalAndCoplanarPoint(cameraDirection.negate(), targetPos)
+        const ikChainForSolver = createIKChainFromBones(chain, targetPos, chainName)
+        const worldPositions = chain.map(b => b.getWorldPosition(new THREE.Vector3()))
+        ikChainForSolver.joints.forEach((j, i) => j.position.copy(worldPositions[i]))
 
-      const ikChainForSolver = createIKChainFromBones(chain, targetPos, chainName)
-      const worldPositions = chain.map(b => {
-        const p = new THREE.Vector3()
-        b.getWorldPosition(p)
-        return p
-      })
-      ikChainForSolver.joints.forEach((j, i) => j.position.copy(worldPositions[i]))
-
-      setActiveIKChain(ikChainForSolver)
-      setIkTarget(targetPos)
-      setDraggedBone(bone)
+        setActiveIKChain(ikChainForSolver)
+        setIkTarget(targetPos)
+        setDraggedBone({ bone, type: 'ik' })
+        return
+      }
     }
-  }, [ikChains, camera, operationMode])
+
+    // FK for other joints
+    const isSelectableJoint = bones.some(b => b.uuid === bone.uuid)
+    if (isSelectableJoint) {
+      setLastMousePos({ x: event.clientX, y: event.clientY })
+      setDraggedBone({ bone, type: 'fk' })
+    }
+  }, [ikChains, bones, camera, operationMode])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
-      if (!draggedBone || !activeIKChain || !ikTarget) return
+      if (!draggedBone) return
 
-      const mouse = new THREE.Vector2(
-        (event.clientX / size.width) * 2 - 1,
-        -(event.clientY / size.height) * 2 + 1
-      )
-      raycaster.setFromCamera(mouse, camera)
-      const newTarget = new THREE.Vector3()
-      raycaster.ray.intersectPlane(dragPlane.current, newTarget)
+      if (draggedBone.type === 'ik') {
+        if (!activeIKChain || !ikTarget) return
+        const mouse = new THREE.Vector2(
+          (event.clientX / size.width) * 2 - 1,
+          -(event.clientY / size.height) * 2 + 1
+        )
+        raycaster.setFromCamera(mouse, camera)
+        const newTarget = new THREE.Vector3()
+        raycaster.ray.intersectPlane(dragPlane.current, newTarget)
+        if (newTarget) setIkTarget(newTarget)
 
-      if (newTarget) {
-        setIkTarget(newTarget)
+      } else if (draggedBone.type === 'fk') {
+        if (!lastMousePos) return
+        const SENSITIVITY = 0.02
+        const currentMousePos = { x: event.clientX, y: event.clientY }
+        const screenDelta = {
+          x: currentMousePos.x - lastMousePos.x,
+          y: currentMousePos.y - lastMousePos.y
+        }
+        setLastMousePos(currentMousePos)
+
+        const forwardAxis = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
+        const rightAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)
+
+        draggedBone.bone.rotateOnWorldAxis(forwardAxis, screenDelta.x * SENSITIVITY)
+        draggedBone.bone.rotateOnWorldAxis(rightAxis, -screenDelta.y * SENSITIVITY)
+
+        if (onPoseChange) onPoseChange(extractCurrentPose())
       }
     }
 
@@ -712,6 +735,7 @@ function HumanModel({
       setDraggedBone(null)
       setActiveIKChain(null)
       setIkTarget(null)
+      setLastMousePos(null)
     }
 
     if (draggedBone) {
@@ -723,15 +747,13 @@ function HumanModel({
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [draggedBone, activeIKChain, ikTarget, camera, raycaster, size])
+  }, [draggedBone, activeIKChain, ikTarget, lastMousePos, camera, raycaster, size, onPoseChange, extractCurrentPose])
 
   useFrame(() => {
-    if (activeIKChain && ikTarget && draggedBone) {
+    if (draggedBone?.type === 'ik' && activeIKChain && ikTarget) {
       activeIKChain.target.copy(ikTarget)
       const solver = new FABRIKSolver(activeIKChain, 0.01, 15)
-      const success = solver.solve()
-
-      if (success) {
+      if (solver.solve()) {
         const chainBones = ikChains[activeIKChain.name]
         if (!chainBones) return
 
@@ -739,26 +761,14 @@ function HumanModel({
           const bone = chainBones[i]
           const nextSolvedPosition = activeIKChain.joints[i + 1].position
           const parent = bone.parent
-
           if (parent) {
-            const parentInverse = parent.matrixWorld.clone().invert()
-            const bonePosition = bone.position.clone()
-            const boneScale = bone.scale.clone()
-
             const targetLocal = parent.worldToLocal(nextSolvedPosition.clone())
-
-            const lookAtMatrix = new THREE.Matrix4()
-            lookAtMatrix.lookAt(bone.position, targetLocal, bone.up)
-
+            const lookAtMatrix = new THREE.Matrix4().lookAt(bone.position, targetLocal, bone.up)
             const newQuaternion = new THREE.Quaternion().setFromRotationMatrix(lookAtMatrix)
             bone.quaternion.slerp(newQuaternion, 0.6)
           }
         }
-
-        if (onPoseChange) {
-          const poseData = extractCurrentPose()
-          onPoseChange(poseData)
-        }
+        if (onPoseChange) onPoseChange(extractCurrentPose())
       }
     }
   })
@@ -841,7 +851,7 @@ function HumanModel({
           key={bone.uuid}
           bone={bone}
           onPointerDown={handleJointPointerDown}
-          isDragging={draggedBone?.uuid === bone.uuid}
+          isDragging={draggedBone?.bone.uuid === bone.uuid}
           isVisible={operationMode === 'pose'}
         />
       ))}
