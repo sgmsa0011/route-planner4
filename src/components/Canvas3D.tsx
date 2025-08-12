@@ -669,10 +669,6 @@ function HumanModel({
   const dragPlane = useRef(new THREE.Plane())
   const initialBoneMatrix = useRef(new THREE.Matrix4())
 
-  // IK states from previous implementation
-  const [activeIKChain, setActiveIKChain] = useState<IKChain | null>(null)
-  const [ikTarget, setIkTarget] = useState<THREE.Vector3 | null>(null)
-
   const handleJointPointerDown = useCallback((bone: THREE.Bone, event: ThreeEvent<PointerEvent>) => {
     if (operationMode !== 'pose') {
       setSelectedBone(null)
