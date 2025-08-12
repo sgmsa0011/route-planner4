@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Toolbar, { OperationMode } from '@/components/Toolbar'
@@ -22,7 +22,7 @@ interface Course {
   steps: Step[]
 }
 
-export default function EditorPage() {
+function EditorContent() {
   const params = useSearchParams()
   const router = useRouter()
   const courseId = params.get('id')
@@ -144,5 +144,13 @@ export default function EditorPage() {
         onPlay={handlePlay}
       />
     </main>
+  )
+}
+
+export default function EditorPage() {
+  return (
+    <Suspense fallback={<div className="text-white p-4">読み込み中...</div>}>
+      <EditorContent />
+    </Suspense>
   )
 }

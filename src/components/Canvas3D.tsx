@@ -3,6 +3,7 @@
 import React, { Suspense, useRef, useState, useEffect, useCallback } from 'react'
 import { Canvas, useThree, useFrame, ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, Environment, Grid, useGLTF, useTexture, TransformControls } from '@react-three/drei'
+import type { OrbitControls as ThreeOrbitControls } from 'three-stdlib'
 import * as THREE from 'three'
 import { FABRIKSolver, createIKChainFromBones, type IKChain } from '@/lib/ik'
 import { OperationMode } from './Toolbar'
@@ -669,9 +670,7 @@ function HumanModel({
   const dragPlane = useRef(new THREE.Plane())
   const initialBoneMatrix = useRef(new THREE.Matrix4())
 
-  // IK states from previous implementation
-  const [activeIKChain, setActiveIKChain] = useState<IKChain | null>(null)
-  const [ikTarget, setIkTarget] = useState<THREE.Vector3 | null>(null)
+  // IK states are defined above
 
   const handleJointPointerDown = useCallback((bone: THREE.Bone, event: ThreeEvent<PointerEvent>) => {
     if (operationMode !== 'pose') {
@@ -696,7 +695,7 @@ function HumanModel({
 
   const handleGizmoDragChange = useCallback((isDragging: boolean) => {
     setIsIKDragging(isDragging)
-    if (controls) (controls as any).enabled = !isDragging
+    if (controls) (controls as unknown as ThreeOrbitControls).enabled = !isDragging
 
     if (isDragging && selectedBone) {
       initialBoneMatrix.current.copy(selectedBone.matrixWorld)
@@ -854,7 +853,8 @@ function HumanModel({
             object={selectedBone}
             mode={gizmoMode}
             onObjectChange={handleGizmoChange}
-            onDraggingChanged={handleGizmoDragChange}
+            onMouseDown={() => handleGizmoDragChange(true)}
+            onMouseUp={() => handleGizmoDragChange(false)}
             space={gizmoMode === 'translate' ? 'world' : 'local'}
             size={0.5}
         />

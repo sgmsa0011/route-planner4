@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "pre-commit: lint -> test"
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "[pre-commit] npmが見つかりません。npmをインストールしてください。" >&2
+  exit 1
+fi
+
+# Lint
+echo "[pre-commit] Running: npm run lint"
+npm run lint
+
+# Test
+echo "[pre-commit] Running: npm test"
+npm test
+
+echo "[pre-commit] OK"
