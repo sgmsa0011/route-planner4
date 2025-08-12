@@ -31,6 +31,7 @@ export default function EditorPage() {
   const [currentData, setCurrentData] = useState<CanvasPoseData | null>(null)
   const [loadData, setLoadData] = useState<CanvasPoseData | null>(null)
   const [mode, setMode] = useState<OperationMode>('view')
+  const [gizmoMode, setGizmoMode] = useState<'translate' | 'rotate'>('translate')
   const [resetTrigger, setResetTrigger] = useState(0)
   const [preset, setPreset] = useState<string | null>(null)
 
@@ -124,12 +125,16 @@ export default function EditorPage() {
         resetTrigger={resetTrigger}
         presetPose={preset}
         loadPoseData={loadData}
+        gizmoMode={gizmoMode}
+        onGizmoModeChange={setGizmoMode}
       />
       <Toolbar
         currentMode={mode}
         onModeChange={setMode}
         onResetPose={handleReset}
         onPresetPose={(p) => setPreset(p)}
+        gizmoMode={gizmoMode}
+        onGizmoModeChange={setGizmoMode}
       />
       <Controls
         poses={course.steps}
