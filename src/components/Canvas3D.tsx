@@ -3,9 +3,7 @@
 import React, { Suspense, useRef, useState, useEffect, useCallback } from 'react'
 import { Canvas, useThree, useFrame, ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, Environment, Grid, useGLTF, useTexture, TransformControls } from '@react-three/drei'
-import type { OrbitControls as ThreeOrbitControls } from 'three-stdlib'
 import * as THREE from 'three'
-import { FABRIKSolver, createIKChainFromBones, type IKChain } from '@/lib/ik'
 import { OperationMode } from './Toolbar'
 
 const modeLabel: Record<OperationMode, string> = {
@@ -42,8 +40,6 @@ interface SceneProps {
   resetTrigger?: number
   presetPose?: string | null
   loadPoseData?: CanvasPoseData | null
-  gizmoMode?: 'translate' | 'rotate'
-  onGizmoModeChange?: (mode: 'translate' | 'rotate') => void
 }
 
 // 背景壁コンポーネント（アスペクト比対応）
@@ -185,38 +181,202 @@ function getJointInfo(boneName: string) {
   }
 }
 
-// 関節コントロールポイント（IK対応版）
+// 関節コントロールポイント（復活・改善版）
 function JointControl({
   bone,
-  onPointerDown,
-  isDragging,
+  onDrag,
   isVisible
 }: {
   bone: THREE.Bone
-  onPointerDown: (bone: THREE.Bone, event: ThreeEvent<PointerEvent>) => void
-  isDragging: boolean
+  onDrag: (bone: THREE.Bone, screenDelta: { x: number, y: number }, camera: THREE.Camera) => void
   isVisible: boolean
 }) {
+  const { camera } = useThree()
   const meshRef = useRef<THREE.Mesh>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const [worldPosition] = useState(new THREE.Vector3())
+  const [lastMousePos, setLastMousePos] = useState<{ x: number, y: number } | null>(null)
   const jointInfo = getJointInfo(bone.name)
 
   useFrame(() => {
     if (meshRef.current && bone) {
+      // ボーンのワールド座標を取得
       bone.getWorldPosition(worldPosition)
       meshRef.current.position.copy(worldPosition)
     }
   })
 
-  const handlePointerDown = useCallback((event: ThreeEvent<PointerEvent>) => {
+    const handlePointerDown = useCallback((event: ThreeEvent<PointerEvent>) => {
+    // 左クリックのみ受け付ける
     if (event.nativeEvent.button !== 0) return
+
     event.stopPropagation()
-    onPointerDown(bone, event)
-  }, [bone, onPointerDown])
+    event.nativeEvent.preventDefault()
+    setIsDragging(true)
+
+        // 🎯 ドラッグ開始位置を記録
+    const startPos = {
+      x: event.nativeEvent.clientX,
+      y: event.nativeEvent.clientY
+    }
+    setLastMousePos(startPos)
+
+    console.log('✅ ドラッグ開始:', bone.name, '開始位置:', startPos)
+  }, [bone.name])
+
+    const handlePointerUp = useCallback((event: ThreeEvent<PointerEvent>) => {
+    if (!isDragging) return
+
+    event.stopPropagation()
+    event.nativeEvent.preventDefault()
+    setIsDragging(false)
+    setLastMousePos(null)
+
+    console.log('✅ ドラッグ終了:', bone.name)
+  }, [isDragging, bone.name])
+
+    const handlePointerMove = useCallback((event: ThreeEvent<PointerEvent>) => {
+    // デバッグログは実際にドラッグ中のみ
+    if (isDragging && lastMousePos) {
+      console.log('📍 [PointerMove] ドラッグ中のマウス移動:', bone.name, {
+        buttons: event.nativeEvent.buttons,
+        clientX: event.nativeEvent.clientX,
+        clientY: event.nativeEvent.clientY
+      })
+    }
+
+    if (!isDragging || !lastMousePos) {
+      // 不要なログを削除
+      return
+    }
+
+    // 🔧 重要：マウスボタンが実際に押されているかチェック
+    if (event.nativeEvent.buttons === 0) {
+      // ボタンが離されている場合はドラッグ終了
+      setIsDragging(false)
+      setLastMousePos(null)
+      console.log('✅ ボタンリリース検出でドラッグ終了:', bone.name)
+      return
+    }
+
+        // 左ボタンが押されている場合のみポーズ編集
+    if (event.nativeEvent.buttons === 1) {
+      event.stopPropagation()
+      event.nativeEvent.preventDefault()
+
+      // 🎯 マウス移動量（スクリーン座標）を計算
+      const currentMousePos = {
+        x: event.nativeEvent.clientX,
+        y: event.nativeEvent.clientY
+      }
+
+      const screenDelta = {
+        x: currentMousePos.x - lastMousePos.x,
+        y: currentMousePos.y - lastMousePos.y
+      }
+
+      console.log('🎯 [PointerMove] 関節:', bone.name, '移動量:', screenDelta)
+
+      // 微小な移動は無視（ノイズ対策）
+      if (Math.abs(screenDelta.x) > 1 || Math.abs(screenDelta.y) > 1) {
+        // 移動量を関節ドラッグハンドラーに渡す
+        console.log('🎯 [PointerMove] ドラッグハンドラー呼び出し開始')
+        onDrag(bone, screenDelta, camera)
+        console.log('🎯 [PointerMove] ドラッグハンドラー呼び出し完了')
+      } else {
+        console.log('🎯 [PointerMove] 微小移動のため無視 - deltaX:', Math.abs(screenDelta.x), 'deltaY:', Math.abs(screenDelta.y))
+      }
+
+      // 次回計算用に現在位置を保存
+      setLastMousePos(currentMousePos)
+    } else {
+      console.log('⚠️ [PointerMove] ボタン状態が不正:', event.nativeEvent.buttons)
+    }
+  }, [isDragging, lastMousePos, bone, onDrag])
+
+  const handlePointerEnter = useCallback(() => {
+    setIsHovered(true)
+  }, [])
+
+  const handlePointerLeave = useCallback(() => {
+    setIsHovered(false)
+    // ポインターが関節から離れた場合、ドラッグ中でもホバー解除
+  }, [])
+
+  // 🔧 グローバルマウスイベントでドラッグ状態を確実に管理
+  useEffect(() => {
+    if (!isDragging) return
+
+    console.log('🔧 [GlobalMouse] イベント登録:', bone.name)
+
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      if (!lastMousePos) return
+
+      // 左ボタンが押されている場合のみ
+      if (event.buttons === 1) {
+        const currentMousePos = {
+          x: event.clientX,
+          y: event.clientY
+        }
+
+        const screenDelta = {
+          x: currentMousePos.x - lastMousePos.x,
+          y: currentMousePos.y - lastMousePos.y
+        }
+
+        // 微小な移動は無視
+        if (Math.abs(screenDelta.x) > 1 || Math.abs(screenDelta.y) > 1) {
+          console.log('🔧 [GlobalMove] 関節:', bone.name, '移動量:', screenDelta)
+          onDrag(bone, screenDelta, camera)
+          setLastMousePos(currentMousePos)
+        }
+      } else if (event.buttons === 0) {
+        // ボタンが離された場合はドラッグ終了
+        setIsDragging(false)
+        setLastMousePos(null)
+        console.log('✅ [GlobalMove] ボタンリリース検出でドラッグ終了:', bone.name)
+      }
+    }
+
+        const handleGlobalMouseUp = () => {
+      console.log('✅ [GlobalMouseUp] ドラッグ終了:', bone.name)
+      setIsDragging(false)
+      setLastMousePos(null)
+    }
+
+    const handleGlobalMouseLeave = () => {
+      console.log('✅ [GlobalMouseLeave] ドラッグ終了:', bone.name)
+      setIsDragging(false)
+      setLastMousePos(null)
+    }
+
+    // ドラッグ状態を強制リセットするタイマー（3秒後）
+    const resetTimer = setTimeout(() => {
+      if (isDragging) {
+        console.log('⏰ [AutoReset] 3秒経過でドラッグ状態をリセット:', bone.name)
+        setIsDragging(false)
+        setLastMousePos(null)
+      }
+    }, 3000)
+
+    // ウィンドウ全体でマウスアップを監視
+    window.addEventListener('mousemove', handleGlobalMouseMove)
+    window.addEventListener('mouseup', handleGlobalMouseUp)
+    window.addEventListener('mouseleave', handleGlobalMouseLeave)
+
+    return () => {
+      console.log('🔧 [GlobalMouse] イベント解除:', bone.name)
+      clearTimeout(resetTimer)
+      window.removeEventListener('mousemove', handleGlobalMouseMove)
+      window.removeEventListener('mouseup', handleGlobalMouseUp)
+      window.removeEventListener('mouseleave', handleGlobalMouseLeave)
+    }
+  }, [isDragging, lastMousePos, bone, onDrag])
 
   if (!isVisible) return null
 
+  // 関節情報に基づくサイズと色
   const sphereSize = jointInfo.size
   const baseColor = jointInfo.color
   const hoverColor = '#6fe6dd'
@@ -224,11 +384,14 @@ function JointControl({
 
   return (
     <group>
+      {/* メイン関節球 */}
       <mesh
         ref={meshRef}
         onPointerDown={handlePointerDown}
-        onPointerEnter={() => setIsHovered(true)}
-        onPointerLeave={() => setIsHovered(false)}
+        onPointerUp={handlePointerUp}
+        onPointerMove={handlePointerMove}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
       >
         <sphereGeometry args={[sphereSize, 12, 12]} />
         <meshBasicMaterial
@@ -237,7 +400,9 @@ function JointControl({
           opacity={0.8}
         />
       </mesh>
-      {isHovered && !isDragging && (
+
+      {/* ホバー時のリング */}
+      {isHovered && (
         <mesh position={worldPosition}>
           <ringGeometry args={[sphereSize * 1.5, sphereSize * 2, 16]} />
           <meshBasicMaterial
@@ -255,36 +420,33 @@ function JointControl({
 // キーボードハンドラーコンポーネント
 function KeyboardHandler({
   operationMode,
-  onTransformModeChange,
-  onGizmoModeChange,
+  onTransformModeChange
 }: {
   operationMode: OperationMode
   onTransformModeChange: (mode: 'translate' | 'rotate' | 'scale') => void
-  onGizmoModeChange?: (mode: 'translate' | 'rotate') => void
 }) {
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.altKey || event.shiftKey) return
+    if (operationMode !== 'transform') return
 
-      const targetMode = operationMode === 'transform' ? 'model' : 'bone'
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ctrl、Alt、Shiftが押されている場合は無視
+      if (event.ctrlKey || event.altKey || event.shiftKey) return
 
       switch (event.key.toLowerCase()) {
         case 't':
-          event.preventDefault();
-          if (targetMode === 'model') onTransformModeChange('translate');
-          else if (onGizmoModeChange) onGizmoModeChange('translate');
-          console.log(`${targetMode} mode: Translate (T)`);
+          event.preventDefault()
+          onTransformModeChange('translate')
+          console.log('変形モード: 移動 (T)')
           break
         case 'r':
-          event.preventDefault();
-          if (targetMode === 'model') onTransformModeChange('rotate');
-          else if (onGizmoModeChange) onGizmoModeChange('rotate');
-          console.log(`${targetMode} mode: Rotate (R)`);
+          event.preventDefault()
+          onTransformModeChange('rotate')
+          console.log('変形モード: 回転 (R)')
           break
         case 's':
-          event.preventDefault();
-          if (targetMode === 'model') onTransformModeChange('scale');
-          console.log(`${targetMode} mode: Scale (S)`);
+          event.preventDefault()
+          onTransformModeChange('scale')
+          console.log('変形モード: スケール (S)')
           break
         case 'escape':
           event.preventDefault()
@@ -295,7 +457,7 @@ function KeyboardHandler({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [operationMode, onTransformModeChange, onGizmoModeChange])
+  }, [operationMode, onTransformModeChange])
 
   return null
 }
@@ -363,9 +525,7 @@ function HumanModel({
   onModeChange,
   resetTrigger,
   presetPose,
-  loadPoseData,
-  gizmoMode = 'translate',
-  onGizmoModeChange,
+  loadPoseData
 }: {
   modelUrl?: string
   operationMode: OperationMode
@@ -374,8 +534,6 @@ function HumanModel({
   resetTrigger?: number
   presetPose?: string | null
   loadPoseData?: CanvasPoseData | null
-  gizmoMode?: 'translate' | 'rotate'
-  onGizmoModeChange?: (mode: 'translate' | 'rotate') => void
 }) {
   const modelRef = useRef<THREE.Group>(null)
   const innerModelRef = useRef<THREE.Group>(null)
@@ -385,9 +543,6 @@ function HumanModel({
   const [bones, setBones] = useState<THREE.Bone[]>([])
   const [headBone, setHeadBone] = useState<THREE.Bone | null>(null)
   const [originalPose, setOriginalPose] = useState<Record<string, BoneData> | null>(null)
-  const [ikChains, setIkChains] = useState<Record<string, THREE.Bone[]>>({})
-  const [activeIKChain, setActiveIKChain] = useState<IKChain | null>(null)
-  const [ikTarget, setIkTarget] = useState<THREE.Vector3 | null>(null)
   const [modelTransform, setModelTransform] = useState({
     position: new THREE.Vector3(0, -1, 0),
     // 初期向きを後ろ向き(180度回転)にし、大きさを1.5倍に設定
@@ -433,48 +588,6 @@ function HumanModel({
       // Magic Poser準拠の19個関節のみを選択
       const magicPoserJoints = selectMagicPoserJoints(foundBones)
       setBones(magicPoserJoints)
-
-      // IK チェーンを定義
-      const chains: Record<string, THREE.Bone[]> = {};
-      const findBone = (pattern: RegExp) => magicPoserJoints.find(b => pattern.test(b.name));
-
-      // Right Arm
-      const rightShoulder = findBone(/(right|r).*shoulder/i);
-      const rightUpperArm = findBone(/(right|r).*(upperarm|arm)(?!.*hand)/i);
-      const rightForearm = findBone(/(right|r).*forearm/i);
-      const rightHand = findBone(/(right|r).*hand$/i);
-      if (rightShoulder && rightUpperArm && rightForearm && rightHand) {
-          chains['rightArm'] = [rightShoulder, rightUpperArm, rightForearm, rightHand];
-      }
-
-      // Left Arm
-      const leftShoulder = findBone(/(left|l).*shoulder/i);
-      const leftUpperArm = findBone(/(left|l).*(upperarm|arm)(?!.*hand)/i);
-      const leftForearm = findBone(/(left|l).*forearm/i);
-      const leftHand = findBone(/(left|l).*hand$/i);
-      if (leftShoulder && leftUpperArm && leftForearm && leftHand) {
-          chains['leftArm'] = [leftShoulder, leftUpperArm, leftForearm, leftHand];
-      }
-
-      // Right Leg
-      const rightUpLeg = findBone(/(right|r).*upleg/i);
-      const rightLeg = findBone(/(right|r).*leg(?!.*up)/i);
-      const rightFoot = findBone(/(right|r).*foot(?!.*toe)/i);
-      if (rightUpLeg && rightLeg && rightFoot) {
-          chains['rightLeg'] = [rightUpLeg, rightLeg, rightFoot];
-      }
-
-      // Left Leg
-      const leftUpLeg = findBone(/(left|l).*upleg/i);
-      const leftLeg = findBone(/(left|l).*leg(?!.*up)/i);
-      const leftFoot = findBone(/(left|l).*foot(?!.*toe)/i);
-      if (leftUpLeg && leftLeg && leftFoot) {
-          chains['leftLeg'] = [leftUpLeg, leftLeg, leftFoot];
-      }
-
-      setIkChains(chains);
-      console.log('IK Chains defined:', chains);
-
       const head = magicPoserJoints.find(b => /head|skull/i.test(b.name)) || null
       setHeadBone(head)
       setOriginalPose(originalBoneData)
@@ -664,108 +777,53 @@ function HumanModel({
     return poseData
   }, [bones])
 
-  const [selectedBone, setSelectedBone] = useState<THREE.Bone | null>(null)
-  const [isIKDragging, setIsIKDragging] = useState(false)
-  const { camera, raycaster, size, controls } = useThree()
-  const dragPlane = useRef(new THREE.Plane())
-  const initialBoneMatrix = useRef(new THREE.Matrix4())
+  const handleJointDrag = useCallback(
+    (
+      bone: THREE.Bone,
+      screenDelta: { x: number; y: number },
+      camera: THREE.Camera
+    ) => {
+      const SENSITIVITY = 0.02
 
-  // IK states are defined above
+      const forwardAxis = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
+      const rightAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)
 
-  const handleJointPointerDown = useCallback((bone: THREE.Bone, event: ThreeEvent<PointerEvent>) => {
-    if (operationMode !== 'pose') {
-      setSelectedBone(null)
-      return
-    }
-    event.stopPropagation()
-    setSelectedBone(bone)
-  }, [operationMode])
-
-  // Unselect bone when clicking away from the model
-  useEffect(() => {
-    const handlePointerMissed = (event: PointerEvent) => {
-      if ((event.target as HTMLElement).tagName === 'CANVAS') {
-        setSelectedBone(null)
-      }
-    }
-    const canvas = document.querySelector('canvas')
-    canvas?.addEventListener('pointerdown', handlePointerMissed)
-    return () => canvas?.removeEventListener('pointerdown', handlePointerMissed)
-  }, [])
-
-  const handleGizmoDragChange = useCallback((isDragging: boolean) => {
-    setIsIKDragging(isDragging)
-    if (controls) (controls as unknown as ThreeOrbitControls).enabled = !isDragging
-
-    if (isDragging && selectedBone) {
-      initialBoneMatrix.current.copy(selectedBone.matrixWorld)
-
-      const chainName = Object.keys(ikChains).find(name =>
-        ikChains[name].some(b => b.uuid === selectedBone.uuid)
-      )
-      if (chainName) {
-        const chain = ikChains[chainName]
-        const targetPos = new THREE.Vector3()
-        chain[chain.length - 1].getWorldPosition(targetPos)
-        const ikChainForSolver = createIKChainFromBones(chain, targetPos, chainName)
-        const worldPositions = chain.map(b => b.getWorldPosition(new THREE.Vector3()))
-        ikChainForSolver.joints.forEach((j, i) => j.position.copy(worldPositions[i]))
-        setActiveIKChain(ikChainForSolver)
-      }
-    } else {
-      setActiveIKChain(null)
-    }
-  }, [controls, selectedBone, ikChains])
-
-  const handleGizmoChange = () => {
-    if (!selectedBone) return
-
-    if (gizmoMode === 'translate' && activeIKChain) {
-      // Revert bone's direct movement
-      const parentInverse = selectedBone.parent?.matrixWorld.clone().invert()
-      if (parentInverse) {
-        const newMatrix = initialBoneMatrix.current.clone().multiply(parentInverse)
-        newMatrix.decompose(selectedBone.position, selectedBone.quaternion, selectedBone.scale)
+      const applyRotation = (target: THREE.Bone, ratio: number) => {
+        target.rotateOnWorldAxis(forwardAxis, screenDelta.x * SENSITIVITY * ratio)
+        target.rotateOnWorldAxis(rightAxis, -screenDelta.y * SENSITIVITY * ratio)
+        target.updateMatrix()
+        target.updateMatrixWorld(true)
       }
 
-      // Update IK target
-      const newTargetPos = new THREE.Vector3()
-      selectedBone.getWorldPosition(newTargetPos)
-      setIkTarget(newTargetPos)
+      const isExtremity = /hand/i.test(bone.name) || /foot/i.test(bone.name)
 
-    } else {
-      // For rotation, TransformControls modifies the bone directly.
-      // Just need to broadcast the change.
-      if (onPoseChange) onPoseChange(extractCurrentPose())
-    }
-  }
-
-  useFrame(() => {
-    if (isIKDragging && activeIKChain && ikTarget) {
-      activeIKChain.target.copy(ikTarget)
-      const solver = new FABRIKSolver(activeIKChain, 0.01, 15)
-      if (solver.solve()) {
-        const chainBones = ikChains[activeIKChain.name]
-        if (!chainBones) return
-
-        for (let i = 0; i < chainBones.length - 1; i++) {
-          const bone = chainBones[i]
-          const nextSolvedPosition = activeIKChain.joints[i + 1].position
-          const parent = bone.parent
-          if (parent) {
-            const targetLocal = parent.worldToLocal(nextSolvedPosition.clone())
-            const lookAtMatrix = new THREE.Matrix4().lookAt(bone.position, targetLocal, bone.up)
-            const newQuaternion = new THREE.Quaternion().setFromRotationMatrix(lookAtMatrix)
-            bone.quaternion.slerp(newQuaternion, 0.6)
+      if (isExtremity) {
+        // 手首・足首ノードでは自身の回転を行わず、親関節を回転させる
+        let parent = bone.parent
+        let depth = 0
+        while (parent && depth < 2) {
+          if (parent instanceof THREE.Bone) {
+            applyRotation(parent, 1)
+            depth++
           }
+          parent = parent.parent
         }
-        if (onPoseChange) onPoseChange(extractCurrentPose())
+      } else {
+        // 通常の関節は自身を回転させる
+        applyRotation(bone, 1)
       }
-    }
-  })
+
+      if (onPoseChange) {
+        const poseData = extractCurrentPose()
+        onPoseChange(poseData)
+      }
+    },
+    [onPoseChange, extractCurrentPose]
+  )
+
 
   if (!gltf || !gltf.scene) {
-    return null
+    return null // 水色立方体を削除
   }
 
   return (
@@ -841,24 +899,10 @@ function HumanModel({
         <JointControl
           key={bone.uuid}
           bone={bone}
-          onPointerDown={handleJointPointerDown}
-          isDragging={selectedBone?.uuid === bone.uuid}
+          onDrag={handleJointDrag}
           isVisible={operationMode === 'pose'}
         />
       ))}
-
-      {/* TransformControls for selected bone */}
-      {selectedBone && operationMode === 'pose' && (
-        <TransformControls
-            object={selectedBone}
-            mode={gizmoMode}
-            onObjectChange={handleGizmoChange}
-            onMouseDown={() => handleGizmoDragChange(true)}
-            onMouseUp={() => handleGizmoDragChange(false)}
-            space={gizmoMode === 'translate' ? 'world' : 'local'}
-            size={0.5}
-        />
-      )}
     </group>
   )
 }
@@ -892,9 +936,7 @@ function Scene({
   onModeChange,
   resetTrigger,
   presetPose,
-  loadPoseData,
-  gizmoMode,
-  onGizmoModeChange,
+  loadPoseData
 }: SceneProps) {
   return (
     <>
@@ -915,8 +957,6 @@ function Scene({
           resetTrigger={resetTrigger}
           presetPose={presetPose}
           loadPoseData={loadPoseData}
-          gizmoMode={gizmoMode}
-          onGizmoModeChange={onGizmoModeChange}
         />
       </Suspense>
 
@@ -944,9 +984,7 @@ export default function Canvas3D({
   onModeChange,
   resetTrigger,
   presetPose,
-  loadPoseData,
-  gizmoMode,
-  onGizmoModeChange,
+  loadPoseData
 }: SceneProps) {
   const [debugInfo, setDebugInfo] = useState({
     camera: [0, 0, 0],
@@ -992,8 +1030,6 @@ export default function Canvas3D({
           resetTrigger={resetTrigger}
           presetPose={presetPose}
           loadPoseData={loadPoseData}
-          gizmoMode={gizmoMode}
-          onGizmoModeChange={onGizmoModeChange}
         />
       </Canvas>
 

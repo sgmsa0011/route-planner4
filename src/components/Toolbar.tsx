@@ -9,17 +9,13 @@ interface ToolbarProps {
   onModeChange: (mode: OperationMode) => void
   onResetPose?: () => void
   onPresetPose?: (poseType: 'tpose' | 'relax' | 'sit') => void
-  gizmoMode?: 'translate' | 'rotate'
-  onGizmoModeChange?: (mode: 'translate' | 'rotate') => void
 }
 
 export default function Toolbar({
   currentMode,
   onModeChange,
   onResetPose,
-  onPresetPose,
-  gizmoMode,
-  onGizmoModeChange,
+  onPresetPose
 }: ToolbarProps) {
   const modeConfig = {
     view: {
@@ -67,25 +63,7 @@ export default function Toolbar({
 
         {/* ポーズモード時の追加コントロール */}
         {currentMode === 'pose' && (
-          <div className="mt-3 pt-3 border-t border-gray-600 space-y-2">
-            <div className="flex gap-2">
-              <button
-                onClick={() => onGizmoModeChange && onGizmoModeChange('translate')}
-                className={`w-1/2 px-2 py-1 text-xs rounded transition-colors ${
-                  gizmoMode === 'translate' ? 'bg-blue-500 text-white' : 'bg-gray-600 hover:bg-gray-500'
-                }`}
-              >
-                移動 (T)
-              </button>
-              <button
-                onClick={() => onGizmoModeChange && onGizmoModeChange('rotate')}
-                className={`w-1/2 px-2 py-1 text-xs rounded transition-colors ${
-                  gizmoMode === 'rotate' ? 'bg-blue-500 text-white' : 'bg-gray-600 hover:bg-gray-500'
-                }`}
-              >
-                回転 (R)
-              </button>
-            </div>
+          <div className="mt-3 pt-3 border-t border-gray-600">
             <button
               onClick={onResetPose}
               className="w-full px-3 py-1 text-xs bg-red-700 rounded hover:bg-red-600 transition-colors"

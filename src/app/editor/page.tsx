@@ -1,5 +1,5 @@
 'use client'
-import { Suspense, useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import Toolbar, { OperationMode } from '@/components/Toolbar'
@@ -22,7 +22,7 @@ interface Course {
   steps: Step[]
 }
 
-function EditorContent() {
+export default function EditorPage() {
   const params = useSearchParams()
   const router = useRouter()
   const courseId = params.get('id')
@@ -31,7 +31,6 @@ function EditorContent() {
   const [currentData, setCurrentData] = useState<CanvasPoseData | null>(null)
   const [loadData, setLoadData] = useState<CanvasPoseData | null>(null)
   const [mode, setMode] = useState<OperationMode>('view')
-  const [gizmoMode, setGizmoMode] = useState<'translate' | 'rotate'>('translate')
   const [resetTrigger, setResetTrigger] = useState(0)
   const [preset, setPreset] = useState<string | null>(null)
 
@@ -125,16 +124,12 @@ function EditorContent() {
         resetTrigger={resetTrigger}
         presetPose={preset}
         loadPoseData={loadData}
-        gizmoMode={gizmoMode}
-        onGizmoModeChange={setGizmoMode}
       />
       <Toolbar
         currentMode={mode}
         onModeChange={setMode}
         onResetPose={handleReset}
         onPresetPose={(p) => setPreset(p)}
-        gizmoMode={gizmoMode}
-        onGizmoModeChange={setGizmoMode}
       />
       <Controls
         poses={course.steps}
@@ -144,13 +139,5 @@ function EditorContent() {
         onPlay={handlePlay}
       />
     </main>
-  )
-}
-
-export default function EditorPage() {
-  return (
-    <Suspense fallback={<div className="text-white p-4">読み込み中...</div>}>
-      <EditorContent />
-    </Suspense>
   )
 }
